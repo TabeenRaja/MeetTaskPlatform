@@ -1,0 +1,11 @@
+Django>=5.0
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+psycopg[binary]
+python-dotenv
+openai-whisper
+spacy
+presidio-analyzer
+google-genai
+pydantic>=2
