@@ -79,7 +79,10 @@ def analyze(sanitized, meeting_date):
     fallback = os.getenv("GEMINI_FALLBACK_MODEL", "").strip()
     if fallback and fallback != settings.GEMINI_MODEL:
         models.append(fallback)
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    client = genai.Client(
+    api_key=settings.GEMINI_API_KEY,
+    http_options=types.HttpOptions(timeout=60000)
+)
     prompt = PROMPT.format(date=meeting_date.date().isoformat(), text=sanitized)
     busy = limited = missing = bad_reply = False
     for model in models:
