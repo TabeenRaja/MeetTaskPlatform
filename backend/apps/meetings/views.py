@@ -1,4 +1,8 @@
 import os
+import logging
+from django.core.mail import send_mail
+from django.db import transaction
+from django.utils import timezone
 from django.conf import settings
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -12,12 +16,39 @@ from .serializers import MeetingSerializer, OutputSerializer
 from .services import approval, pipeline
 
 
+logger = logging.getLogger(__name__)
+
+
+def notify_participants(meeting, subject, verb, extra_recipients=None):
+    """Attempt invitation delivery; never report success if sending fails.
+    Uses existing account email addresses and Django EMAIL_* settings.
+    Returns a count of accepted email messages (not guaranteed inbox delivery).
+    """
+    recipients = sorted({u.email for u in meeting.participants.all() if u.email} | set(extra_recipients or []))
+    if not recipients:
+        return {"notification_status": "no_email_addresses", "notifications_sent": 0}
+    when = timezone.localtime(meeting.scheduled_at).strftime("%d %b %Y at %I:%M %p %Z")
+    body = (f"{verb}: {meeting.title}\n"
+            f"Date/time: {when}\nLocation: {meeting.location or 'To be confirmed'}\n"
+            f"Agenda: {meeting.description or 'Not provided'}\n\n"
+            + ("This meeting has been cancelled. Please do not attend." if meeting.status == Meeting.Status.CANCELLED else "Please attend at the scheduled location."))
+    try:
+        # Single email per participant avoids exposing recipient addresses to others.
+        sent = sum(send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [addr], fail_silently=False)
+                   for addr in recipients)
+        return {"notification_status": "sent" if sent == len(recipients) else "partial",
+                "notifications_sent": sent, "notifications_expected": len(recipients)}
+    except Exception:
+        logger.exception("Meeting %s invitation email delivery failed", meeting.pk)
+        return {"notification_status": "failed", "notifications_sent": 0}
+
+
 class MeetingViewSet(viewsets.ModelViewSet):
     serializer_class = MeetingSerializer
     http_method_names = ["get", "post", "put", "patch", "head", "options"]  # no delete
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update", "upload_audio"):
+        if self.action in ("create", "update", "partial_update", "upload_audio", "cancel_processing", "start", "cancel"):
             return [IsManager()]
         return [IsAuthenticated()]
 
@@ -40,6 +71,57 @@ class MeetingViewSet(viewsets.ModelViewSet):
         m = s.save()
         audit(self.request.user, "MEETING_CREATED", m)
 
+    def create(self, request, *args, **kwargs):
+        response = super().create(request, *args, **kwargs)
+        if response.data.get("status") == Meeting.Status.SCHEDULED:
+            m = self.get_queryset().get(pk=response.data["id"])
+            response.data.update(notify_participants(m, f"Meeting invitation: {m.title}", "Meeting scheduled"))
+        return response
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        audit(self.request.user, "MEETING_UPDATED", instance)
+
+    def update(self, request, *args, **kwargs):
+        # Serialize concurrent editing/starting/cancellation of the same meeting.
+        with transaction.atomic():
+            meeting = Meeting.objects.select_for_update().get(pk=self.get_object().pk)
+            previous_emails = {u.email for u in meeting.participants.all() if u.email}
+            serializer = self.get_serializer(meeting, data=request.data, partial=kwargs.get("partial", False))
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            data = dict(serializer.data)
+        if meeting.status == Meeting.Status.SCHEDULED:
+            data.update(notify_participants(meeting, f"Meeting updated: {meeting.title}", "Meeting details updated", previous_emails))
+        return Response(data)
+
+    @action(detail=True, methods=["post"])
+    def start(self, request, pk=None):
+        # A scheduled meeting may start on time or late, never early.
+        with transaction.atomic():
+            m = Meeting.objects.select_for_update().get(pk=pk, manager=request.user)
+            if m.status != Meeting.Status.SCHEDULED:
+                raise ValidationError("Only scheduled meetings can be started.")
+            if timezone.now() < m.scheduled_at:
+                raise ValidationError("This meeting cannot start before its scheduled time. Reschedule it with one hour notice if needed.")
+            m.status = Meeting.Status.IN_PROGRESS
+            m.started_at = timezone.now()
+            m.save(update_fields=["status", "started_at"])
+        audit(request.user, "MEETING_STARTED", m)
+        return Response(self.get_serializer(m).data)
+
+    @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        with transaction.atomic():
+            m = Meeting.objects.select_for_update().get(pk=pk, manager=request.user)
+            if m.status != Meeting.Status.SCHEDULED:
+                raise ValidationError("Only meetings that have not started can be cancelled.")
+            m.status = Meeting.Status.CANCELLED
+            m.save(update_fields=["status"])
+        audit(request.user, "MEETING_CANCELLED", m)
+        result = notify_participants(m, f"Meeting cancelled: {m.title}", "Meeting cancelled")
+        return Response({**self.get_serializer(m).data, **result})
+
     @action(detail=True, methods=["post"], url_path="upload-audio")
     def upload_audio(self, request, pk=None):
         m = self.get_object()
@@ -51,6 +133,12 @@ class MeetingViewSet(viewsets.ModelViewSet):
             raise ValidationError(f"Unsupported format. Allowed: {', '.join(sorted(settings.ALLOWED_AUDIO_EXT))}")
         if f.size > settings.MAX_AUDIO_MB * 1024 * 1024:
             raise ValidationError(f"File too large. Max {settings.MAX_AUDIO_MB} MB.")
+        if m.status == "SCHEDULED":
+            raise ValidationError("Start the scheduled meeting before uploading audio.")
+        if m.status == "CANCELLED":
+            raise ValidationError("Cancelled meetings cannot accept recordings.")
+        if m.processing_cancel_requested:
+            raise ValidationError("The previous processing run is being cleaned up. Please retry once cancellation finishes.")
         if m.status == "PROCESSING":
             raise ValidationError("Already processing.")
         if m.status == "APPROVED":
@@ -59,10 +147,31 @@ class MeetingViewSet(viewsets.ModelViewSet):
             raise ValidationError("Add at least one participant first.")
         m.audio.save(f"meeting_{m.id}{ext}", f)
         m.status = "PROCESSING"
-        m.save(update_fields=["status"])
+        m.processing_cancel_requested = False
+        m.processing_error = ""
+        m.save(update_fields=["status", "processing_cancel_requested", "processing_error"])
         audit(request.user, "AUDIO_UPLOADED", m, size=f.size)
         pipeline.start(m.id)
         return Response({"status": "PROCESSING"}, status=202)
+
+    @action(detail=True, methods=["post"], url_path="cancel-processing")
+    def cancel_processing(self, request, pk=None):
+        # Cooperative cancel. Existing blocking Whisper/Gemini calls cannot be force-killed.
+        # The worker checks this flag after every stage and before publishing results.
+        with transaction.atomic():
+            m = Meeting.objects.select_for_update().get(pk=pk, manager=request.user)
+            if m.status != Meeting.Status.PROCESSING:
+                raise ValidationError("This meeting is not currently processing.")
+            # The meeting stops showing PROCESSING immediately. Keep the cancellation
+            # flag set until the background worker has safely released its old audio.
+            # Uploading again is blocked while that cleanup remains outstanding.
+            m.processing_cancel_requested = True
+            m.status = Meeting.Status.DRAFT
+            m.processing_error = ""
+            m.save(update_fields=["processing_cancel_requested", "status", "processing_error"])
+        audit(request.user, "PROCESSING_CANCEL_REQUESTED", m)
+        return Response({"status": "DRAFT", "processing_cancel_requested": True,
+                         "message": "Processing cancelled for this meeting. Background cleanup may still be pending."})
 
     @action(detail=True, methods=["get"])
     def transcript(self, request, pk=None):
