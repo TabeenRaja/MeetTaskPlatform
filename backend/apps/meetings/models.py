@@ -8,18 +8,30 @@ private_storage = FileSystemStorage(location=settings.PRIVATE_MEDIA_ROOT, base_u
 class Meeting(models.Model):
     class Status(models.TextChoices):
         DRAFT = "DRAFT"
+        SCHEDULED = "SCHEDULED"
+        CANCELLED = "CANCELLED"
+        IN_PROGRESS = "IN_PROGRESS"
         PROCESSING = "PROCESSING"
         PENDING_REVIEW = "PENDING_REVIEW"
         APPROVED = "APPROVED"
         REJECTED = "REJECTED"
         FAILED = "FAILED"
 
+    class Mode(models.TextChoices):
+        NOW = "now", "Live meeting"
+        LATER = "later", "Scheduled meeting"
+        PAST = "past", "Historical recording"
+
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     scheduled_at = models.DateTimeField()
+    meeting_mode = models.CharField(max_length=10, choices=Mode.choices, default=Mode.NOW, db_index=True)
+    location = models.CharField(max_length=255, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
     is_confidential = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT, db_index=True)
     processing_error = models.CharField(max_length=300, blank=True)
+    processing_cancel_requested = models.BooleanField(default=False)
     manager = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="managed_meetings")
     project = models.ForeignKey("projects.Project", null=True, blank=True, on_delete=models.SET_NULL, related_name="meetings")
     participants = models.ManyToManyField(settings.AUTH_USER_MODEL, through="MeetingParticipant", related_name="meetings")
