@@ -1,0 +1,70 @@
+/* Live processing screen for a meeting. Pure CSS animation, no extra libraries. */
+
+.mtp-bars { display: flex; align-items: center; gap: 4px; height: 56px; }
+.mtp-bars span {
+  display: block; width: 5px; height: 100%; border-radius: 3px; background: #7dd3fc;
+  transform-origin: center; animation: mtp-bar 1s ease-in-out infinite;
+}
+.mtp-bars span:nth-child(1) { animation-delay: -0.9s; }
+.mtp-bars span:nth-child(2) { animation-delay: -0.7s; }
+.mtp-bars span:nth-child(3) { animation-delay: -0.5s; }
+.mtp-bars span:nth-child(4) { animation-delay: -0.3s; }
+.mtp-bars span:nth-child(5) { animation-delay: -0.6s; }
+.mtp-bars span:nth-child(6) { animation-delay: -0.2s; }
+.mtp-bars span:nth-child(7) { animation-delay: -0.8s; }
+.mtp-bars span:nth-child(8) { animation-delay: -0.4s; }
+.mtp-bars span:nth-child(9) { animation-delay: -0.1s; }
+@keyframes mtp-bar { 0%, 100% { transform: scaleY(0.2); } 50% { transform: scaleY(1); } }
+
+.mtp-line { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.35); }
+.mtp-type { animation: mtp-type 2.6s steps(14, end) infinite; }
+@keyframes mtp-type { 0% { width: 0; } 70%, 100% { width: var(--w); } }
+
+.mtp-word { position: relative; display: block; height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.4); overflow: hidden; }
+.mtp-word.red::after {
+  content: ''; position: absolute; inset: 0; background: #38bdf8; border-radius: 4px;
+  transform-origin: left; transform: scaleX(0); animation: mtp-redact 2.8s ease-in-out infinite;
+  animation-delay: var(--d, 0s);
+}
+@keyframes mtp-redact { 0%, 15% { transform: scaleX(0); } 40%, 85% { transform: scaleX(1); } 100% { transform: scaleX(0); } }
+
+.mtp-orbit { position: absolute; inset: 0; animation: mtp-spin 3.2s linear infinite; }
+.mtp-orbit.b { animation-duration: 5s; animation-direction: reverse; inset: 10px; }
+.mtp-orbit i { position: absolute; top: 0; left: 50%; width: 8px; height: 8px; margin-left: -4px; border-radius: 9999px; background: #7dd3fc; box-shadow: 0 0 12px #7dd3fc; }
+.mtp-orbit.b i { background: #ffffff; width: 6px; height: 6px; margin-left: -3px; box-shadow: 0 0 10px #ffffff; }
+@keyframes mtp-spin { to { transform: rotate(360deg); } }
+.mtp-twinkle { animation: mtp-twinkle 1.6s ease-in-out infinite; }
+@keyframes mtp-twinkle { 0%, 100% { transform: scale(0.9); opacity: 0.85; } 50% { transform: scale(1.12); opacity: 1; } }
+
+.mtp-scan { position: absolute; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, transparent, #7dd3fc, transparent); animation: mtp-scan 2.2s ease-in-out infinite; }
+@keyframes mtp-scan { 0% { top: 8%; opacity: 0; } 15%, 85% { opacity: 1; } 100% { top: 92%; opacity: 0; } }
+
+.mtp-row { opacity: 0; animation: mtp-row 3.6s ease-out infinite; animation-delay: var(--d, 0s); }
+@keyframes mtp-row {
+  0% { opacity: 0; transform: translateX(-10px); }
+  14%, 86% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+.mtp-dot { width: 10px; height: 10px; border-radius: 9999px; background: #7dd3fc; animation: mtp-pulse 1.2s ease-in-out infinite; animation-delay: var(--d, 0s); }
+@keyframes mtp-pulse { 0%, 100% { transform: scale(0.6); opacity: 0.5; } 50% { transform: scale(1); opacity: 1; } }
+
+.mtp-ring { animation: mtp-ring 1.8s ease-out infinite; }
+@keyframes mtp-ring { 0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.6); } 100% { box-shadow: 0 0 0 12px rgba(56, 189, 248, 0); } }
+
+.mtp-fill { background: linear-gradient(90deg, #38bdf8, #ffffff, #38bdf8); background-size: 200% 100%; animation: mtp-shimmer 2s linear infinite; }
+@keyframes mtp-shimmer { to { background-position: -200% 0; } }
+.mtp-indet { position: relative; overflow: hidden; }
+.mtp-indet::after { content: ''; position: absolute; top: 0; bottom: 0; width: 35%; border-radius: 9999px; background: linear-gradient(90deg, transparent, #7dd3fc, transparent); animation: mtp-sweep 1.4s ease-in-out infinite; }
+@keyframes mtp-sweep { 0% { left: -35%; } 100% { left: 100%; } }
+
+.mtp-fade { animation: mtp-fade 0.5s ease-out; }
+@keyframes mtp-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .mtp-bars span, .mtp-type, .mtp-word.red::after, .mtp-orbit, .mtp-twinkle, .mtp-scan, .mtp-row,
+  .mtp-dot, .mtp-ring, .mtp-fill, .mtp-indet::after, .mtp-fade { animation: none !important; }
+  .mtp-type { width: var(--w); }
+  .mtp-row { opacity: 1; }
+  .mtp-word.red::after { transform: scaleX(1); }
+}

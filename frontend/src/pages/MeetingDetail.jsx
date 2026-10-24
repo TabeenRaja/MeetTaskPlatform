@@ -1,4 +1,5 @@
 import Recorder from '../components/Recorder'
+import ProcessingProgress from '../components/ProcessingProgress'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api, errMsg } from '../api'
@@ -99,7 +100,7 @@ export default function MeetingDetail() {
   // Poll while the backend pipeline is running
   useEffect(() => {
     if (m?.status !== 'PROCESSING') return
-    const t = setInterval(load, 3000)
+    const t = setInterval(load, 2000)
     return () => clearInterval(t)
   }, [m?.status, load])
 
@@ -168,12 +169,7 @@ export default function MeetingDetail() {
 
       {m.status === 'FAILED' && <ErrorBox msg={m.processing_error || 'Processing failed.'} />}
 
-      {m.status === 'PROCESSING' && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-600 border-t-transparent" />
-          Processing: transcription, PII masking and AI analysis. This page updates automatically.
-        </div>
-      )}
+      {m.status === 'PROCESSING' && <ProcessingProgress progress={m.progress} />}
 
       {canReview && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
