@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, timedelta
+from django.utils import timezone
 from pydantic import ValidationError as PydanticError
 from rest_framework import serializers
 from apps.accounts.models import User
@@ -28,6 +29,36 @@ class MeetingSerializer(serializers.ModelSerializer):
     project_name = serializers.CharField(source="project.name", default=None, read_only=True)
     progress = serializers.SerializerMethodField()
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        now = timezone.now()
+        minimum = now + timedelta(hours=1)
+
+        if self.instance is not None:
+            if self.instance.status != Meeting.Status.SCHEDULED:
+                raise serializers.ValidationError("Only scheduled meetings can be edited.")
+            if "meeting_mode" in attrs and attrs["meeting_mode"] != self.instance.meeting_mode:
+                raise serializers.ValidationError("Meeting mode cannot be changed.")
+            if "scheduled_at" in attrs and attrs["scheduled_at"] != self.instance.scheduled_at:
+                if self.instance.scheduled_at <= minimum:
+                    raise serializers.ValidationError({"scheduled_at": "Rescheduling closes one hour before the original meeting time. You may cancel instead."})
+                if attrs["scheduled_at"] < minimum:
+                    raise serializers.ValidationError({"scheduled_at": "Choose a new time at least one hour from now."})
+        else:
+            mode = attrs.get("meeting_mode", Meeting.Mode.NOW)
+            when = attrs.get("scheduled_at")
+            if mode == Meeting.Mode.NOW:
+                attrs["scheduled_at"] = now
+            elif not when:
+                raise serializers.ValidationError({"scheduled_at": "Date and time are required."})
+            elif mode == Meeting.Mode.LATER and when < minimum:
+                raise serializers.ValidationError({"scheduled_at": "Scheduled meetings need at least one hour of advance notice."})
+            elif mode == Meeting.Mode.PAST and when >= now:
+                raise serializers.ValidationError({"scheduled_at": "Historical meetings must be in the past."})
+            if mode == Meeting.Mode.LATER and not attrs.get("location", "").strip():
+                raise serializers.ValidationError({"location": "Enter a location for the scheduled meeting."})
+        return attrs
+
     def get_progress(self, m):
         return live_progress.get(m.id) if m.status == "PROCESSING" else None
 
@@ -38,10 +69,10 @@ class MeetingSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Meeting
-        fields = ["id", "title", "description", "scheduled_at", "is_confidential", "project", "project_name","status",
-                  "processing_error", "manager_name", "participant_ids", "participants",
+        fields = ["id", "title", "description", "scheduled_at", "meeting_mode", "location", "started_at", "is_confidential", "project", "project_name","status",
+                  "processing_error", "processing_cancel_requested", "manager_name", "participant_ids", "participants",
                   "has_audio", "created_at", "progress"]
-        read_only_fields = ["status", "processing_error"]
+        read_only_fields = ["status", "processing_error", "processing_cancel_requested", "started_at"]
 
     def get_participants(self, m):
         is_manager = self.context["request"].user.role == "MANAGER"
@@ -58,6 +89,8 @@ class MeetingSerializer(serializers.ModelSerializer):
 
     def create(self, v):
         users = v.pop("participant_ids", [])
+        mode = v.get("meeting_mode", Meeting.Mode.NOW)
+        v["status"] = Meeting.Status.SCHEDULED if mode == Meeting.Mode.LATER else Meeting.Status.DRAFT
         m = Meeting.objects.create(manager=self.context["request"].user, **v)
         sync_participants(m, users)
         return m
@@ -81,6 +114,7 @@ class OutputSerializer(serializers.ModelSerializer):
                   "decisions", "action_items", "generated_by", "model_name", "created_at"]
         read_only_fields = ["meeting", "version", "status", "generated_by", "model_name"]
 
+   
     def validate_action_items(self, items):
         valid = set(self.instance.meeting.links.values_list("user_id", flat=True))
         out = []
@@ -108,3 +142,37 @@ class OutputSerializer(serializers.ModelSerializer):
             base["needs_review"] = aid is None or not base["deadline"] or base["confidence"] == "LOW"
             out.append(base)
         return out
+    
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        # Get participants linked to this meeting.
+        participants = {
+            link.user_id: link.user
+            for link in instance.meeting.links.select_related("user")
+        }
+
+        # Add employee names to the API response.
+        for item in data.get("action_items", []):
+            assignee_id = item.get("assignee_id")
+
+            try:
+                assignee_id = (
+                    int(assignee_id)
+                    if assignee_id not in (None, "")
+                    else None
+                )
+            except (TypeError, ValueError):
+                assignee_id = None
+
+            user = participants.get(assignee_id)
+
+            if user:
+                item["assignee_name"] = (
+                    user.get_full_name().strip()
+                    or user.username
+                )
+            else:
+                item["assignee_name"] = None
+
+        return data
