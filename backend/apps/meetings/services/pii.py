@@ -102,9 +102,58 @@ def mask_pii(text):
     return text
 
 
+def _fuzzy_pseudonymize(text, participants, threshold=0.86, margin=0.12):
+    """Match clear Whisper first-name spelling variations BEFORE Presidio masks them.
+
+    Conservative rules: only title-cased alphabetic words with >=4 letters;
+    a single unique participant must beat the runner-up by `margin`.
+    Ambiguous words stay unchanged for the general PII masker to handle.
+    """
+    from difflib import SequenceMatcher
+
+    choices = {}
+    for user, pseudonym in participants:
+        full = (user.get_full_name() or '').strip()
+        # Use registered FIRST names, not last names, to reduce accidental matches.
+        first = full.split()[0] if full else ''
+        if len(first) >= 4 and first.isalpha():
+            choices.setdefault(first.casefold(), set()).add(pseudonym)
+
+    unique = [(name, next(iter(labels))) for name, labels in choices.items() if len(labels) == 1]
+    if not unique:
+        return text
+
+    # Avoid rewriting P-labels or [PII_PLACEHOLDER] tags.
+    parts = re.split(r'(\[[A-Z][A-Z0-9_]*\]|\bP\d+\b)', text)
+
+    def replace_token(match):
+        word = match.group(0)
+        if len(word) < 4 or not word[0].isupper() or not word[1:].islower():
+            return word
+        scores = sorted(
+            ((SequenceMatcher(None, word.casefold(), name).ratio(), ps) for name, ps in unique),
+            key=lambda pair: pair[0], reverse=True,
+        )
+        if not scores or scores[0][0] < threshold:
+            return word
+        if len(scores) > 1 and scores[0][0] - scores[1][0] < margin:
+            return word
+        return scores[0][1]
+
+    for i in range(0, len(parts), 2):
+        parts[i] = re.sub(r'\b[A-Z][a-z]{3,}\b', replace_token, parts[i])
+    return ''.join(parts)
+
+
 def sanitize(text, participants):
-    """Best-effort de-identification. Not guaranteed to catch all PII."""
-    return mask_pii(pseudonymize(text, participants))
+    """Best-effort de-identification; only sanitized text should reach Gemini.
+
+    Exact participant matching runs first, then cautious speech-to-text spelling
+    correction (e.g. Sarah -> Sara's P-label), then generic PII masking.
+    """
+    text = pseudonymize(text or '', participants)
+    text = _fuzzy_pseudonymize(text, participants)
+    return mask_pii(text)
 
 
 def _norm(s):
@@ -137,3 +186,55 @@ def match_participant(label, links):
             if c and (n == c or (len(n) >= 4 and len(c) >= 4 and (c.startswith(n) or n.startswith(c)))):
                 hits.add(l.user_id)
     return hits.pop() if len(hits) == 1 else None
+
+
+from difflib import SequenceMatcher
+
+def suggest_participant(label, links, threshold=0.80):
+    """Suggest a participant for slightly misspelled names."""
+    raw = (label or "").strip().lower()
+
+    if not raw or raw in {"unknown", "unresolved", "someone", "not specified"}:
+        return None
+
+    # Do not guess when the AI explicitly gives a P-label.
+    if re.search(r"\bP\d+\b", raw, re.I):
+        return None
+
+    def normalize(value):
+        return re.sub(r"[^a-z0-9]", "", value.lower())
+
+    target = normalize(raw)
+    if len(target) < 3:
+        return None
+
+    scores = []
+
+    for link in links:
+        user = link.user
+        full = user.get_full_name() or ""
+
+        candidates = [full, user.username]
+        candidates += [p for p in full.split() if len(p) >= 3]
+
+        score = max(
+            (
+                SequenceMatcher(None, target, normalize(name)).ratio()
+                for name in candidates
+                if normalize(name)
+            ),
+            default=0
+        )
+
+        scores.append((score, link.user_id))
+
+    scores.sort(reverse=True)
+
+    if not scores or scores[0][0] < threshold:
+        return None
+
+    # Avoid suggesting a name when two people are similarly likely.
+    if len(scores) > 1 and scores[0][0] - scores[1][0] < 0.10:
+        return None
+
+    return scores[0][1]
