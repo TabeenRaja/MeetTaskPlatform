@@ -3,6 +3,7 @@ from pydantic import ValidationError as PydanticError
 from rest_framework import serializers
 from apps.accounts.models import User
 from .models import AIOutput, Meeting, MeetingParticipant
+from .services import progress as live_progress
 from .services.ai import ActionItemSchema
 from apps.projects.models import Project
 
@@ -25,6 +26,10 @@ class MeetingSerializer(serializers.ModelSerializer):
     has_audio = serializers.SerializerMethodField()
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all(), required=False, allow_null=True)
     project_name = serializers.CharField(source="project.name", default=None, read_only=True)
+    progress = serializers.SerializerMethodField()
+
+    def get_progress(self, m):
+        return live_progress.get(m.id) if m.status == "PROCESSING" else None
 
     def validate_project(self, p):
         if p and p.manager_id != self.context["request"].user.id:
@@ -35,7 +40,7 @@ class MeetingSerializer(serializers.ModelSerializer):
         model = Meeting
         fields = ["id", "title", "description", "scheduled_at", "is_confidential", "project", "project_name","status",
                   "processing_error", "manager_name", "participant_ids", "participants",
-                  "has_audio", "created_at"]
+                  "has_audio", "created_at", "progress"]
         read_only_fields = ["status", "processing_error"]
 
     def get_participants(self, m):
@@ -98,7 +103,8 @@ class OutputSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"Action item {i}: invalid assignee.")
             if aid is not None and aid not in valid:
                 raise serializers.ValidationError(f"Action item {i}: assignee must be a meeting participant.")
-            base.update(assignee_id=aid, discard=bool(it.get("discard", False)))
+            base.update(assignee_id=aid, discard=bool(it.get("discard", False)),
+                        proof_required=bool(it.get("proof_required", False)))
             base["needs_review"] = aid is None or not base["deadline"] or base["confidence"] == "LOW"
             out.append(base)
         return out

@@ -59,27 +59,55 @@ def _mock(sanitized, meeting_date):
         ])
 
 
+RETRY_CODES = {429, 500, 502, 503, 504}   # busy / temporary errors on Google's side
+WAITS = (0, 3, 8)                          # seconds before each attempt on one model
+
+
 def analyze(sanitized, meeting_date):
-    """Returns (MeetingAnalysis, generated_by, model_name)."""
+    """Returns (MeetingAnalysis, generated_by, model_name).
+    Gemini sometimes answers 503 "high demand" for a minute or two, so temporary errors are retried
+    with a short wait, then the optional GEMINI_FALLBACK_MODEL is tried before giving up."""
     if settings.AI_ADAPTER == "mock":
         return _mock(sanitized, meeting_date), "mock", "mock"
     if not settings.GEMINI_API_KEY or not settings.GEMINI_MODEL:
         raise AIError("Gemini is not configured: set GEMINI_API_KEY and GEMINI_MODEL.")
+    import os
+    import time
     from google import genai
     from google.genai import errors, types
-    try:
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        resp = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=PROMPT.format(date=meeting_date.date().isoformat(), text=sanitized),
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json", response_schema=MeetingAnalysis, temperature=0.2))
-        return MeetingAnalysis.model_validate_json(resp.text), "gemini", settings.GEMINI_MODEL
-    except errors.APIError as e:
-        if e.code == 404:
-            raise AIError(f"Gemini model '{settings.GEMINI_MODEL}' unavailable. Fix GEMINI_MODEL in .env.")
-        if e.code == 429:
-            raise AIError("Gemini rate limit reached. Retry later.")
-        raise AIError(f"Gemini API error (code {e.code}).")
-    except (ValidationError, ValueError):
+    models = [settings.GEMINI_MODEL]
+    fallback = os.getenv("GEMINI_FALLBACK_MODEL", "").strip()
+    if fallback and fallback != settings.GEMINI_MODEL:
+        models.append(fallback)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    prompt = PROMPT.format(date=meeting_date.date().isoformat(), text=sanitized)
+    busy = limited = missing = bad_reply = False
+    for model in models:
+        for wait in WAITS:
+            if wait:
+                time.sleep(wait)
+            try:
+                resp = client.models.generate_content(
+                    model=model, contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json", response_schema=MeetingAnalysis, temperature=0.2))
+                return MeetingAnalysis.model_validate_json(resp.text), "gemini", model
+            except errors.APIError as e:
+                if e.code == 404:
+                    missing = True
+                    break  # this model name is wrong; try the fallback, retrying cannot help
+                if e.code not in RETRY_CODES:
+                    raise AIError(f"Gemini API error (code {e.code}).")
+                limited = limited or e.code == 429
+                busy = busy or e.code != 429
+            except (ValidationError, ValueError):
+                bad_reply = True  # occasionally a malformed JSON reply; one more attempt usually fixes it
+    if busy:
+        raise AIError("Gemini is busy right now (high demand). Please upload again in a minute.")
+    if limited:
+        raise AIError("Gemini rate limit reached. Retry later.")
+    if bad_reply:
         raise AIError("Gemini returned a malformed response.")
+    if missing:
+        raise AIError(f"Gemini model '{settings.GEMINI_MODEL}' unavailable. Fix GEMINI_MODEL in .env.")
+    raise AIError("Gemini request failed.")
