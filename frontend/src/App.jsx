@@ -6,6 +6,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
+import { can } from "./access";
 import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 import Analytics from "./pages/Analytics";
@@ -25,6 +26,8 @@ import TaskDetail from "./pages/TaskDetail";
 import Tasks from "./pages/Tasks";
 import Users from "./pages/Users";
 import UserForm from "./pages/Userform";
+import Roles from "./pages/Roles";
+import RoleForm from "./pages/RoleForm";
 import ChangePassword from "./pages/Changepassword";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -42,9 +45,14 @@ function Guard({ children }) {
 }
 
 // UX only. The backend enforces the real permissions.
-function Role({ allow, children }) {
+// `perm` (optional): also require this permission, so an admin can allow or block a single
+// action for a role or a person (e.g. an employee who may create meetings).
+function Role({ allow, perm, children }) {
   const { user } = useAuth();
-  return allow.includes(user.role) ? children : <Navigate to="/" replace />;
+  const ok = perm
+    ? user.role !== "ADMIN" && can(user, perm)
+    : allow.includes(user.role);
+  return ok ? children : <Navigate to="/" replace />;
 }
 
 const WORK = ["MANAGER", "EMPLOYEE"];
@@ -90,7 +98,7 @@ export default function App() {
             <Route
               path="meetings/new"
               element={
-                <Role allow={["MANAGER"]}>
+                <Role allow={["MANAGER"]} perm="meetings.create">
                   <MeetingNew />
                 </Role>
               }
@@ -106,7 +114,7 @@ export default function App() {
             <Route
               path="meetings/:id/review"
               element={
-                <Role allow={["MANAGER"]}>
+                <Role allow={["MANAGER"]} perm="meetings.review">
                   <Review />
                 </Role>
               }
@@ -130,7 +138,7 @@ export default function App() {
             <Route
               path="projects"
               element={
-                <Role allow={["MANAGER"]}>
+                <Role allow={["MANAGER"]} perm="projects.manage">
                   <Projects />
                 </Role>
               }
@@ -138,7 +146,7 @@ export default function App() {
             <Route
               path="projects/:id"
               element={
-                <Role allow={["MANAGER"]}>
+                <Role allow={["MANAGER"]} perm="projects.manage">
                   <ProjectDetail />
                 </Role>
               }
@@ -154,7 +162,7 @@ export default function App() {
             <Route
               path="analytics"
               element={
-                <Role allow={["MANAGER"]}>
+                <Role allow={["MANAGER"]} perm="analytics.view">
                   <Analytics />
                 </Role>
               }
@@ -182,6 +190,30 @@ export default function App() {
               element={
                 <Role allow={["ADMIN"]}>
                   <UserForm />
+                </Role>
+              }
+            />
+            <Route
+              path="roles"
+              element={
+                <Role allow={["ADMIN"]}>
+                  <Roles />
+                </Role>
+              }
+            />
+            <Route
+              path="roles/new"
+              element={
+                <Role allow={["ADMIN"]}>
+                  <RoleForm />
+                </Role>
+              }
+            />
+            <Route
+              path="roles/:id/edit"
+              element={
+                <Role allow={["ADMIN"]}>
+                  <RoleForm />
                 </Role>
               }
             />
