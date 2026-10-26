@@ -2,9 +2,9 @@ from django.db import transaction
 from django.db.models import Prefetch
 from rest_framework import viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
-from apps.accounts.permissions import IsManager
+from apps.accounts.permissions import HasPerm
 from apps.core.services import audit
 from apps.tasks.models import Task
 from .models import BacklogItem, Project
@@ -12,12 +12,22 @@ from .serializers import BacklogSerializer, ProjectDetailSerializer, ProjectSeri
 from .services import resolve_assignee, sync_task
 
 
+def require_assign(user, assignee, current_task=None):
+    """Putting a different person on a backlog item creates or reassigns a task, which needs tasks.assign."""
+    if assignee is None:
+        return
+    if current_task is not None and current_task.assignee_id == assignee.id:
+        return  # nothing changes
+    if not user.has_access("tasks.assign"):
+        raise PermissionDenied("You do not have permission to assign tasks.")
+
+
 def fresh(item):
     return BacklogItem.objects.select_related("task__assignee").get(pk=item.pk)
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsManager]
+    permission_classes = [HasPerm("projects.manage")]
     pagination_class = None
     http_method_names = ["get", "post", "patch", "head", "options"]
 
@@ -45,6 +55,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         s = BacklogSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         assignee = resolve_assignee(request.data.get("assignee_id"))
+        require_assign(request.user, assignee)
         with transaction.atomic():
             item = s.save(project=p)
             sync_task(item, assignee, request.user)
@@ -53,7 +64,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
 
 class BacklogViewSet(viewsets.GenericViewSet):
-    permission_classes = [IsManager]
+    permission_classes = [HasPerm("projects.manage")]
     serializer_class = BacklogSerializer
 
     def get_queryset(self):
@@ -68,6 +79,7 @@ class BacklogViewSet(viewsets.GenericViewSet):
             assignee = resolve_assignee(request.data["assignee_id"])
         else:
             assignee = task.assignee if task else None
+        require_assign(request.user, assignee, task)
         with transaction.atomic():
             item = s.save()
             sync_task(item, assignee, request.user)
