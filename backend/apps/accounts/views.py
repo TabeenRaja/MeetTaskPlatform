@@ -10,7 +10,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import status, viewsets
@@ -22,9 +22,10 @@ from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.core.services import audit
-from .models import User
-from .permissions import IsAdmin, IsManager
-from .serializers import LoginSerializer, ProfileSerializer, UserSerializer
+from .access import ALL_CODES, PERMISSIONS
+from .models import Role, User
+from .permissions import CanCreateMeetings, IsAdmin, IsManager
+from .serializers import LoginSerializer, ProfileSerializer, RoleSerializer, UserSerializer
 from .Validators import validate_strong_password
 
 log = logging.getLogger(__name__)
@@ -194,12 +195,15 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdmin]
 
     def get_queryset(self):
-        qs = User.objects.all().order_by("username")
-        q, role = self.request.query_params.get("q"), self.request.query_params.get("role")
+        qs = User.objects.select_related("role_ref").order_by("username")
+        params = self.request.query_params
+        q, role, role_id = params.get("q"), params.get("role"), params.get("role_id")
         if q:
             qs = qs.filter(Q(username__icontains=q) | Q(first_name__icontains=q) | Q(last_name__icontains=q))
         if role:
             qs = qs.filter(role=role)
+        if role_id:
+            qs = qs.filter(role_ref_id=role_id)
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -218,7 +222,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 continue
         if user is None:
             raise ValidationError("Could not generate a unique username. Please try again.")
-        audit(request.user, "USER_CREATED", user, role=user.role)
+        audit(request.user, "USER_CREATED", user, role=user.role_name)
         sent = send_credentials(user, password)
         data = dict(self.get_serializer(user).data)
         data["email_sent"] = sent
@@ -237,19 +241,107 @@ class UserViewSet(viewsets.ModelViewSet):
         if s.instance.role == "ADMIN":
             raise ValidationError("Admin accounts cannot be edited or deactivated here.")
         i = s.instance
-        old = {"role": i.role, "is_active": i.is_active, "can_create_meetings": i.can_create_meetings}
+        old = {"role": i.role_name, "is_active": i.is_active, "overrides": i.all_overrides()}
         u = s.save()
         audit(self.request.user, "USER_UPDATED", u, old=old,
-              new={"role": u.role, "is_active": u.is_active, "can_create_meetings": u.can_create_meetings})
+              new={"role": u.role_name, "is_active": u.is_active, "overrides": u.all_overrides()})
 
     def perform_destroy(self, instance):
         raise ValidationError("Deactivate users instead of deleting them.")
 
 
 class EmployeeListView(APIView):
-    """Managers need a list of employees to add as participants (no emails or roles exposed)."""
-    permission_classes = [IsManager]
+    """People who create meetings need a list of colleagues to add as participants (no emails exposed).
+    Managers, and anyone an admin has allowed to create meetings (employees included).
+
+    The list is limited to the requester's own department:
+      - a manager sees the employees of their department;
+      - an employee (who has been given meeting access) sees the managers and employees of their department;
+      - an admin sees everyone (admins excluded).
+    """
+    permission_classes = [IsManager | CanCreateMeetings]
 
     def get(self, request):
-        qs = User.objects.filter(role="EMPLOYEE", is_active=True).order_by("first_name", "username")
-        return Response([{"id": u.id, "name": u.display_name} for u in qs])
+        me = request.user
+        qs = User.objects.filter(is_active=True).exclude(role="ADMIN").exclude(pk=me.pk)
+        if me.role == "ADMIN":
+            pass
+        else:
+            dept = (me.department or "").strip()
+            if not dept:
+                return Response([])  # no department set, so there is nobody to scope the list to
+            qs = qs.filter(department__iexact=dept)
+            if me.role == "MANAGER":
+                qs = qs.filter(role="EMPLOYEE")
+            else:
+                qs = qs.filter(role__in=["EMPLOYEE", "MANAGER"])
+        qs = qs.order_by("first_name", "username")
+        return Response([{"id": u.id, "name": u.display_name, "role": u.role} for u in qs])
+
+
+class RoleViewSet(viewsets.ModelViewSet):
+    """Admin-only. Create roles, choose what each role may do, and see how many people hold it.
+
+    GET /roles/?assignable=1 lists only the roles that can be given to a user (no Admin).
+    """
+    serializer_class = RoleSerializer
+    permission_classes = [IsAdmin]
+    pagination_class = None
+
+    def get_queryset(self):
+        rank = Case(
+            When(is_system=True, base="ADMIN", then=Value(0)),
+            When(is_system=True, base="MANAGER", then=Value(1)),
+            When(is_system=True, then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+        qs = Role.objects.annotate(user_count=Count("users"), rank=rank).order_by("rank", "name")
+        if self.request.query_params.get("assignable"):
+            qs = qs.exclude(base="ADMIN")
+        return qs
+
+    # Per-person exceptions are no longer set here. An admin edits them on the user's own
+    # Edit page (permission_overrides), so a role only describes what everyone holding it can do.
+
+    def perform_create(self, s):
+        role = s.save()
+        audit(self.request.user, "ROLE_CREATED", role, permissions=role.permissions, base=role.base)
+
+    def perform_update(self, s):
+        old = {"permissions": s.instance.permissions, "base": s.instance.base, "name": s.instance.name}
+        role = s.save()
+        audit(self.request.user, "ROLE_UPDATED", role, old=old,
+              new={"permissions": role.permissions, "base": role.base, "name": role.name})
+
+    def perform_destroy(self, instance):
+        """DELETE /roles/<id>/?move_to=<role id>: people holding the role are moved to that role first."""
+        if instance.base == "ADMIN":
+            raise ValidationError("The Admin role cannot be deleted.")
+        others = Role.objects.exclude(pk=instance.pk).exclude(base="ADMIN")
+        if not others.exists():
+            raise ValidationError("Create another role first. At least one role besides Admin must remain.")
+        n = instance.users.count()
+        target = None
+        if n:
+            move_to = self.request.query_params.get("move_to")
+            if not move_to:
+                raise ValidationError(f"Choose a role to move the {n} user{'s' if n != 1 else ''} to.")
+            try:
+                target = others.get(pk=int(move_to))
+            except (TypeError, ValueError, Role.DoesNotExist):
+                raise ValidationError("Choose a valid role to move the users to.")
+        with transaction.atomic():
+            if target:
+                instance.users.update(role_ref=target, role=target.base)
+            audit(self.request.user, "ROLE_DELETED", instance, name=instance.name,
+                  moved_users=n, moved_to=target.name if target else None)
+            instance.delete()
+
+
+class PermissionCatalogView(APIView):
+    """The list of permissions an admin can grant (used by the role editor and user access settings)."""
+    permission_classes = [IsAdmin]
+
+    def get(self, request):
+        return Response(PERMISSIONS)
