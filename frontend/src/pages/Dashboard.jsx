@@ -10,6 +10,7 @@ import {
   ClipboardList,
   Clock,
   FolderKanban,
+  KeyRound,
   ListChecks,
   Mic,
   Plus,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { api, errMsg } from "../api";
 import { useAuth } from "../auth";
+import { can } from "../access";
 import { Badge, Card, Empty, ErrorBox } from "../components/ui";
 import { fmtDay, isoDate, timeAgo } from "../utils";
 
@@ -922,27 +924,31 @@ function ManagerView({
   return (
     <>
       <Hero name={user.name.split(" ")[0]} role="Manager" focus={focus}>
-        {user.can_create_meetings && (
+        {can(user, "meetings.create") && (
           <Link to="/meetings/new" className={heroBtn}>
             <Plus size={16} /> New meeting
           </Link>
         )}
-        <Link to="/projects" className={heroGhost}>
-          <FolderKanban size={16} /> Create a project
-        </Link>
-        {d.proofs_awaiting > 0 && (
+        {can(user, "projects.manage") && (
+          <Link to="/projects" className={heroGhost}>
+            <FolderKanban size={16} /> Create a project
+          </Link>
+        )}
+        {d.proofs_awaiting > 0 && can(user, "tasks.review") && (
           <Link to="/tasks?status=IN_REVIEW" className={heroGhost}>
             <ShieldCheck size={16} /> Proof to review ({d.proofs_awaiting})
           </Link>
         )}
-        {d.awaiting_review > 0 && (
+        {d.awaiting_review > 0 && can(user, "meetings.review") && (
           <Link to="/meetings" className={heroGhost}>
             <ShieldCheck size={16} /> Review queue ({d.awaiting_review})
           </Link>
         )}
-        <Link to="/analytics" className={heroGhost}>
-          Weekly analytics
-        </Link>
+        {can(user, "analytics.view") && (
+          <Link to="/analytics" className={heroGhost}>
+            Weekly analytics
+          </Link>
+        )}
       </Hero>
       {d.proofs_awaiting > 0 && (
         <Link
@@ -1069,14 +1075,24 @@ function EmployeeView({
         <Link to="/tasks" className={heroBtn}>
           <ListChecks size={16} /> My tasks
         </Link>
-        {user.can_create_meetings && (
-          <Link to="/meetings/new" className={heroGhost}>
+        {can(user, "meetings.create") && (
+          <Link to="/meetings/new" className={heroBtn}>
             <Plus size={16} /> New meeting
           </Link>
         )}
         <Link to="/planner" className={heroGhost}>
           <CalendarDays size={16} /> Planner
         </Link>
+        {can(user, "projects.manage") && (
+          <Link to="/projects" className={heroGhost}>
+            <FolderKanban size={16} /> Projects
+          </Link>
+        )}
+        {can(user, "analytics.view") && (
+          <Link to="/analytics" className={heroGhost}>
+            Weekly analytics
+          </Link>
+        )}
       </Hero>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
         <Stat
@@ -1171,6 +1187,9 @@ function AdminView({ d, notes, user }) {
       >
         <Link to="/users" className={heroBtn}>
           <Users size={16} /> Manage users
+        </Link>
+        <Link to="/roles" className={heroGhost}>
+          <KeyRound size={16} /> Roles & access
         </Link>
         <Link to="/audit" className={heroGhost}>
           <ScrollText size={16} /> Audit logs

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, errMsg } from "../api";
 import {
@@ -24,50 +24,59 @@ const empty = {
   last_name: "",
   email: "",
   phone: "",
-  role: "EMPLOYEE",
+  role_id: "",
+  base: "", // access level of the user being edited (EMPLOYEE or MANAGER)
   department: "",
   department_other: "",
   is_active: true,
-  can_create_meetings: false,
 };
-
-// Default meeting access by role: only managers, unless an admin changes it.
-const roleDefault = (role) => role === "MANAGER";
 
 export default function UserForm() {
   const { id } = useParams();
   const edit = !!id;
   const nav = useNavigate();
   const [f, setF] = useState(empty);
+  const [roles, setRoles] = useState([]);
+  const [catalog, setCatalog] = useState([]);
+  // Per-person exceptions to the role: { code: true | false }. Empty = exactly what the role gives.
+  const [overrides, setOverrides] = useState({});
   const [preview, setPreview] = useState("");
-  const [loading, setLoading] = useState(edit);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [accessTouched, setAccessTouched] = useState(false);
 
   useEffect(() => {
-    if (!edit) return;
-    api
-      .get(`/users/${id}/`)
-      .then(({ data: u }) => {
-        if (u.role === "ADMIN") {
-          nav("/users", { replace: true });
-          return;
+    const calls = [api.get("/roles/", { params: { assignable: 1 } })];
+    if (edit) calls.push(api.get(`/users/${id}/`), api.get("/permissions/"));
+    Promise.all(calls)
+      .then(([r, uu, pc]) => {
+        setRoles(r.data);
+        if (pc) setCatalog(pc.data);
+        if (uu) {
+          const u = uu.data;
+          if (u.role === "ADMIN") {
+            nav("/users", { replace: true });
+            return;
+          }
+          const listed = !u.department || DEPARTMENTS.includes(u.department);
+          setF({
+            username: u.username,
+            first_name: u.first_name || "",
+            last_name: u.last_name || "",
+            email: u.email || "",
+            phone: u.phone || "",
+            role_id: u.role_id,
+            base: u.role,
+            department: listed ? u.department || "" : OTHER,
+            department_other: listed ? "" : u.department,
+            is_active: u.is_active,
+          });
+          setOverrides(u.permission_overrides || {});
+        } else {
+          // new user: start on the first employee-level role
+          const def = r.data.find((x) => x.base === "EMPLOYEE") || r.data[0];
+          if (def) setF((prev) => ({ ...prev, role_id: def.id }));
         }
-        const listed = !u.department || DEPARTMENTS.includes(u.department);
-        setF({
-          username: u.username,
-          first_name: u.first_name || "",
-          last_name: u.last_name || "",
-          email: u.email || "",
-          phone: u.phone || "",
-          role: u.role,
-          department: listed ? u.department || "" : OTHER,
-          department_other: listed ? "" : u.department,
-          is_active: u.is_active,
-          can_create_meetings: !!u.can_create_meetings,
-        });
-        setAccessTouched(true);
       })
       .catch((e) => setErr(errMsg(e)))
       .finally(() => setLoading(false));
@@ -92,17 +101,30 @@ export default function UserForm() {
   }, [edit, f.first_name, f.last_name]);
 
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
-  // Changing the role resets meeting access to that role's default, unless the admin set it by hand
-  const setRole = (e) => {
-    const role = e.target.value;
-    setF({
-      ...f,
-      role,
-      can_create_meetings: accessTouched
-        ? f.can_create_meetings
-        : roleDefault(role),
-    });
+
+  // What the chosen role gives, and what this person ends up with after their exceptions
+  const rolePerms = useMemo(
+    () => roles.find((r) => r.id === Number(f.role_id))?.permissions || [],
+    [roles, f.role_id],
+  );
+  const roleHas = (code) => rolePerms.includes(code);
+  const allowed = (code) =>
+    code in overrides ? overrides[code] : roleHas(code);
+  const setAllowed = (code, on) => {
+    const next = { ...overrides };
+    if (on === roleHas(code))
+      delete next[code]; // same as the role, so no exception needed
+    else next[code] = on;
+    setOverrides(next);
   };
+  const groups = useMemo(() => {
+    const out = {};
+    catalog.forEach((p) => (out[p.group] ||= []).push(p));
+    return Object.entries(out);
+  }, [catalog]);
+  const customCount = Object.keys(overrides).filter(
+    (c) => overrides[c] !== roleHas(c),
+  ).length;
   const department =
     f.department === OTHER ? f.department_other.trim() : f.department;
 
@@ -118,6 +140,7 @@ export default function UserForm() {
     if (f.phone && f.phone.length !== PHONE_LENGTH)
       return setErr(`Phone number must be exactly ${PHONE_LENGTH} digits.`);
     if (!department) return setErr("Please select a department.");
+    if (!f.role_id) return setErr("Please select a role.");
 
     const body = {
       first_name: f.first_name.trim(),
@@ -125,16 +148,21 @@ export default function UserForm() {
       email: f.email.trim(),
       phone: f.phone,
       department,
-      role: f.role,
-      can_create_meetings: accessTouched
-        ? f.can_create_meetings
-        : roleDefault(f.role),
+      role_id: Number(f.role_id),
     };
 
     setBusy(true);
     try {
       if (edit) {
-        await api.patch(`/users/${id}/`, { ...body, is_active: f.is_active });
+        // keep only real exceptions (ones that differ from the role)
+        const exceptions = Object.fromEntries(
+          Object.entries(overrides).filter(([c, v]) => v !== roleHas(c)),
+        );
+        await api.patch(`/users/${id}/`, {
+          ...body,
+          is_active: f.is_active,
+          permission_overrides: exceptions,
+        });
         nav("/users", { state: { notice: { msg: "User updated." } } });
       } else {
         const { data } = await api.post("/users/", body);
@@ -244,10 +272,27 @@ export default function UserForm() {
             </div>
             <div>
               <L required>Role</L>
-              <select className={inputCls} value={f.role} onChange={setRole}>
-                <option value="EMPLOYEE">Employee</option>
-                <option value="MANAGER">Manager</option>
+              <select
+                className={inputCls}
+                value={f.role_id}
+                onChange={(e) =>
+                  setF({ ...f, role_id: Number(e.target.value) })
+                }
+              >
+                {roles
+                  .filter((r) => !edit || !f.base || r.base === f.base)
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}
+                    </option>
+                  ))}
               </select>
+              <p className="mt-1 text-xs text-slate-400">
+                <Link to="/roles" className="text-brand hover:underline">
+                  Manage roles
+                </Link>{" "}
+                to add new ones.
+              </p>
             </div>
             {f.department === OTHER && (
               <div className="sm:col-span-2">
@@ -261,29 +306,6 @@ export default function UserForm() {
               </div>
             )}
           </div>
-        </Card>
-
-        <Card title="Permissions">
-          <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={
-                accessTouched ? f.can_create_meetings : roleDefault(f.role)
-              }
-              onChange={(e) => {
-                setAccessTouched(true);
-                setF({ ...f, can_create_meetings: e.target.checked });
-              }}
-            />
-            <span>
-              <span className="font-medium">Can create meetings</span>
-              <span className="mt-0.5 block text-xs text-slate-500">
-                Managers have this by default. Tick it to let an employee create
-                meetings too, or untick it to remove it from a manager.
-              </span>
-            </span>
-          </label>
         </Card>
 
         <Card title="Account">
@@ -310,6 +332,74 @@ export default function UserForm() {
             )}
           </div>
         </Card>
+
+        {edit && (
+          <Card
+            title="Permissions"
+            action={
+              customCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOverrides({})}
+                  className="text-xs font-medium text-brand hover:underline"
+                >
+                  Reset to role defaults
+                </button>
+              )
+            }
+          >
+            <p className="mb-4 text-xs text-slate-500">
+              Ticked items are what this person can do. They start from the
+              selected role; change a box to make an exception for this person
+              only. The role itself is not affected.
+            </p>
+            <div className="space-y-5">
+              {groups.map(([group, items]) => (
+                <div key={group}>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    {group}
+                  </div>
+                  <div className="space-y-3">
+                    {items.map((p) => {
+                      const on = allowed(p.code);
+                      const custom = on !== roleHas(p.code);
+                      return (
+                        <label
+                          key={p.code}
+                          className="flex cursor-pointer items-start gap-3 text-sm text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={on}
+                            onChange={(e) =>
+                              setAllowed(p.code, e.target.checked)
+                            }
+                          />
+                          <span>
+                            <span className="font-medium">
+                              {p.label}
+                              {custom && (
+                                <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                  {on
+                                    ? "Extra for this person"
+                                    : "Removed for this person"}
+                                </span>
+                              )}
+                            </span>
+                            <span className="mt-0.5 block text-xs text-slate-500">
+                              {p.description}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
 
         <div className="flex justify-end gap-3">
           <Btn

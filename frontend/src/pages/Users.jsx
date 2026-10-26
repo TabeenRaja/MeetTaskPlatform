@@ -22,7 +22,8 @@ export default function Users() {
   const location = useLocation();
   const [data, setData] = useState(null);
   const [q, setQ] = useState("");
-  const [role, setRole] = useState("");
+  const [roleId, setRoleId] = useState("");
+  const [roles, setRoles] = useState([]);
   const [page, setPage] = useState(1);
   const [err, setErr] = useState("");
   const [notice] = useState(location.state?.notice || null);
@@ -38,11 +39,18 @@ export default function Users() {
     setErr("");
     return api
       .get("/users/", {
-        params: { q: q || undefined, role: role || undefined, page },
+        params: { q: q || undefined, role_id: roleId || undefined, page },
       })
       .then((r) => setData(r.data))
       .catch((e) => setErr(errMsg(e)));
-  }, [q, role, page]);
+  }, [q, roleId, page]);
+
+  useEffect(() => {
+    api
+      .get("/roles/")
+      .then((r) => setRoles(r.data))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -92,16 +100,18 @@ export default function Users() {
         </div>
         <select
           className={`${inputCls} w-auto`}
-          value={role}
+          value={roleId}
           onChange={(e) => {
-            setRole(e.target.value);
+            setRoleId(e.target.value);
             setPage(1);
           }}
         >
           <option value="">All roles</option>
-          <option value="ADMIN">Admin</option>
-          <option value="MANAGER">Manager</option>
-          <option value="EMPLOYEE">Employee</option>
+          {roles.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -118,7 +128,7 @@ export default function Users() {
                 <th className={TH}>Email</th>
                 <th className={TH}>Department</th>
                 <th className={TH}>Role</th>
-                <th className={TH}>Create meetings</th>
+                <th className={TH}>Access</th>
                 <th className={TH}>Status</th>
                 <th className={TH}></th>
               </tr>
@@ -135,21 +145,28 @@ export default function Users() {
                     {u.department || "—"}
                   </td>
                   <td className="px-4 py-3">
-                    <Badge value={u.role} />
+                    {u.role_name && u.role_name.toUpperCase() !== u.role ? (
+                      <span className="inline-flex rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand">
+                        {u.role_name}
+                      </span>
+                    ) : (
+                      <Badge value={u.role} />
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {u.role === "ADMIN" ? (
-                      <span className="text-xs text-slate-400">—</span>
+                      <span className="text-xs text-slate-400">Full</span>
                     ) : (
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          u.can_create_meetings
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        {u.can_create_meetings ? "Allowed" : "Not allowed"}
-                      </span>
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                        {u.permissions.length} permission
+                        {u.permissions.length === 1 ? "" : "s"}
+                        {Object.keys(u.permission_overrides || {}).length >
+                          0 && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            Custom
+                          </span>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-3">
