@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from django.db import transaction
+from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.utils import timezone
 from rest_framework import mixins, viewsets
@@ -49,8 +50,23 @@ def _check_files(files):
             raise ValidationError(f"'{os.path.basename(f.name)}' is too large. Max {settings.MAX_PROOF_MB} MB per file.")
 
 
-def _require_role(user, role, message):
-    if user.role != role:
+def _is_owner(task, user):
+    """True when the user is the manager of the task's meeting or project."""
+    if task.meeting_id:
+        return task.meeting.manager_id == user.id
+    if task.project_id:
+        return task.project.manager_id == user.id
+    return False
+
+
+def _require_assignee(task, user, message):
+    if task.assignee_id != user.id:
+        raise PermissionDenied(message)
+
+
+def _require_reviewer(task, user, message):
+    """Reviewing proof needs both: owning the task and holding the tasks.review permission."""
+    if not (_is_owner(task, user) and user.has_access("tasks.review")):
         raise PermissionDenied(message)
 
 
@@ -61,12 +77,10 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
 
     def get_queryset(self):
         u = self.request.user
-        if u.role == "MANAGER":
-            qs = Task.objects.for_manager(u)
-        elif u.role == "EMPLOYEE":
-            qs = Task.objects.filter(assignee=u)
-        else:
+        if u.role == "ADMIN":
             return Task.objects.none()
+        # Everyone sees the tasks assigned to them, plus the tasks of meetings/projects they own.
+        qs = Task.objects.filter(Q(assignee=u) | Q(meeting__manager=u) | Q(project__manager=u))
         p = self.request.query_params
         if p.get("status"):
             qs = qs.filter(status=p["status"])
@@ -96,11 +110,14 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
     def partial_update(self, request, *a, **kw):
         task, u = self.get_object(), request.user
         data = request.data
-        if u.role == "EMPLOYEE" and not set(data.keys()) <= EMPLOYEE_FIELDS:
-            raise PermissionDenied("Employees can only update task status.")
-        if u.role == "MANAGER" and "status" in data:
+        is_assignee = task.assignee_id == u.id
+        if "status" in data and not is_assignee:
             raise PermissionDenied("Only the assigned employee can change task status.")
-        if u.role == "EMPLOYEE" and "status" in data:
+        if set(data.keys()) - EMPLOYEE_FIELDS:
+            # Editing anything besides status (deadline, priority, assignee...) is a manager action.
+            if not (_is_owner(task, u) and u.has_access("tasks.assign")):
+                raise PermissionDenied("You do not have permission to edit this task.")
+        if "status" in data:
             new_status = data.get("status")
             if task.status == "IN_REVIEW" and new_status != "IN_REVIEW":
                 raise ValidationError("This task is waiting for your manager's review. Withdraw your proof first if you need to change it.")
@@ -148,7 +165,6 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
     @action(detail=True, methods=["post"], url_path="submit-proof", parser_classes=[MultiPartParser, FormParser])
     def submit_proof(self, request, pk=None):
         u = request.user
-        _require_role(u, "EMPLOYEE", "Only the assigned employee can submit proof.")
         files = request.FILES.getlist("files")
         link = _clean_link(request.data.get("link"))
         note = (request.data.get("note") or "").strip()
@@ -159,6 +175,7 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
         _check_files(files)
         with transaction.atomic():
             task = self._locked()
+            _require_assignee(task, u, "Only the assigned employee can submit proof.")
             if task.status == "DONE":
                 raise ValidationError("This task is already completed.")
             if task.status == "IN_REVIEW":
@@ -184,9 +201,9 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
     @action(detail=True, methods=["post"], url_path="withdraw-proof")
     def withdraw_proof(self, request, pk=None):
         u = request.user
-        _require_role(u, "EMPLOYEE", "Only the assigned employee can withdraw proof.")
         with transaction.atomic():
             task = self._locked()
+            _require_assignee(task, u, "Only the assigned employee can withdraw proof.")
             if task.status != "IN_REVIEW":
                 raise ValidationError("There is no proof waiting for review on this task.")
             proof = task.proofs.filter(status="SUBMITTED").first()
@@ -204,10 +221,10 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
     @action(detail=True, methods=["post"], url_path="approve-proof")
     def approve_proof(self, request, pk=None):
         u = request.user
-        _require_role(u, "MANAGER", "Only the manager can approve proof.")
         comment = (request.data.get("comment") or "").strip()[:2000]
         with transaction.atomic():
             task = self._locked()
+            _require_reviewer(task, u, "You do not have permission to review proof on this task.")
             proof = task.proofs.filter(status="SUBMITTED").first()
             if task.status != "IN_REVIEW" or not proof:
                 raise ValidationError("There is no proof waiting for review on this task.")
@@ -225,12 +242,12 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
     @action(detail=True, methods=["post"], url_path="request-changes")
     def request_changes(self, request, pk=None):
         u = request.user
-        _require_role(u, "MANAGER", "Only the manager can request changes.")
         comment = (request.data.get("comment") or "").strip()[:2000]
         if not comment:
             raise ValidationError("Tell the employee what needs to change.")
         with transaction.atomic():
             task = self._locked()
+            _require_reviewer(task, u, "You do not have permission to review proof on this task.")
             proof = task.proofs.filter(status="SUBMITTED").first()
             if task.status != "IN_REVIEW" or not proof:
                 raise ValidationError("There is no proof waiting for review on this task.")
@@ -245,7 +262,7 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
 
     @action(detail=True, methods=["get"], url_path=r"proof-files/(?P<file_id>[0-9]+)")
     def proof_file(self, request, pk=None, file_id=None):
-        task = self.get_object()  # only the assignee and the task's manager can reach this
+        task = self.get_object()  # only the assignee and the task's owner can reach this
         pf = ProofFile.objects.filter(pk=file_id, proof__task=task).first()
         if not pf:
             raise Http404
@@ -253,7 +270,7 @@ class TaskViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.Updat
             handle = pf.file.open("rb")
         except (FileNotFoundError, ValueError):
             raise Http404
-        if request.user.role == "MANAGER":
+        if task.assignee_id != request.user.id:
             audit(request.user, "PROOF_FILE_VIEWED", task, file=pf.id)
         resp = FileResponse(handle, as_attachment=True, filename=pf.name,
                             content_type=pf.content_type or "application/octet-stream")
