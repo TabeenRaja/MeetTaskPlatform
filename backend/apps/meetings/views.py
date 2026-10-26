@@ -2,6 +2,7 @@ import os
 import logging
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.conf import settings
 from rest_framework import viewsets
@@ -9,7 +10,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from apps.accounts.permissions import IsManager
+from apps.accounts.permissions import CanCreateMeetings, HasPerm, IsManager
 from apps.core.services import audit
 from .models import AIOutput, Meeting
 from .serializers import MeetingSerializer, OutputSerializer
@@ -48,18 +49,20 @@ class MeetingViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "put", "patch", "head", "options"]  # no delete
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update", "upload_audio", "cancel_processing", "start", "cancel"):
-            return [IsManager()]
+        # Creating needs the "Create meetings" permission (managers have it by default; an admin can
+        # grant it to a role or a single employee). Whoever created a meeting runs it.
+        if self.action == "create":
+            return [CanCreateMeetings()]
+        if self.action in ("update", "partial_update", "upload_audio", "cancel_processing", "start", "cancel"):
+            return [(IsManager | CanCreateMeetings)()]
         return [IsAuthenticated()]
 
     def get_queryset(self):
         u, qs = self.request.user, Meeting.objects.all()
-        if u.role == "MANAGER":
-            qs = qs.filter(manager=u)
-        elif u.role == "EMPLOYEE":
-            qs = qs.filter(participants=u)
-        else:
+        if u.role == "ADMIN":
             return Meeting.objects.none()
+        # meetings you created, plus meetings you were invited to
+        qs = qs.filter(Q(manager=u) | Q(participants=u))
         q, st = self.request.query_params.get("q"), self.request.query_params.get("status")
         if q:
             qs = qs.filter(title__icontains=q)
@@ -180,7 +183,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
         if not t:
             return Response({"available": False})
         u = request.user
-        if u.role == "MANAGER":
+        if m.manager_id == u.id:
             audit(u, "TRANSCRIPT_VIEWED", m)
             return Response({"available": True, "source": t.source,
                              "original": t.original_text, "sanitized": t.sanitized_text})
@@ -192,7 +195,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
     def output(self, request, pk=None):
         m = self.get_object()
         qs = m.outputs.all()
-        if request.user.role != "MANAGER":
+        if m.manager_id != request.user.id:
             qs = qs.filter(status="APPROVED")
         o = qs.first()
         return Response(OutputSerializer(o).data if o else None)
@@ -200,7 +203,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
 
 class OutputViewSet(viewsets.GenericViewSet):
     serializer_class = OutputSerializer
-    permission_classes = [IsManager]
+    permission_classes = [HasPerm("meetings.review")]
 
     def get_queryset(self):
         return AIOutput.objects.filter(meeting__manager=self.request.user)
