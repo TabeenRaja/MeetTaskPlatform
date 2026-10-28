@@ -159,7 +159,7 @@ class MeetingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="cancel-processing")
     def cancel_processing(self, request, pk=None):
-        # Cooperative cancel. Existing blocking Whisper/Gemini calls cannot be force-killed.
+        # Cooperative cancel. Existing blocking Whisper calls cannot be force-killed.
         # The worker checks this flag after every stage and before publishing results.
         with transaction.atomic():
             m = Meeting.objects.select_for_update().get(pk=pk, manager=request.user)
@@ -179,21 +179,28 @@ class MeetingViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"])
     def transcript(self, request, pk=None):
         m = self.get_object()
+        u = request.user
+        # Never return unmasked content before checking confidentiality.
+        if m.manager_id != u.id and m.is_confidential:
+            raise PermissionDenied("Transcript of a confidential meeting is restricted to the manager.")
+        # Hide earlier transcripts during replacement, failure or cancellation.
+        if m.status in (Meeting.Status.PROCESSING, Meeting.Status.FAILED, Meeting.Status.DRAFT) or m.processing_cancel_requested:
+            return Response({"available": False})
         t = getattr(m, "transcript", None)
         if not t:
             return Response({"available": False})
-        u = request.user
+        data = {"available": True, "source": t.source,
+                "normalized": t.normalized_text, "sentences": t.sentences}
         if m.manager_id == u.id:
             audit(u, "TRANSCRIPT_VIEWED", m)
-            return Response({"available": True, "source": t.source,
-                             "original": t.original_text, "sanitized": t.sanitized_text})
-        if m.is_confidential:
-            raise PermissionDenied("Transcript of a confidential meeting is restricted to the manager.")
-        return Response({"available": True, "source": t.source, "sanitized": t.sanitized_text})
+            data["original"] = t.original_text
+        return Response(data)
 
     @action(detail=True, methods=["get"])
     def output(self, request, pk=None):
         m = self.get_object()
+        if m.status in (Meeting.Status.NORMALIZED, Meeting.Status.PROCESSING, Meeting.Status.FAILED, Meeting.Status.DRAFT):
+            return Response(None)
         qs = m.outputs.all()
         if m.manager_id != request.user.id:
             qs = qs.filter(status="APPROVED")
