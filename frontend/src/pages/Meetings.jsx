@@ -5,9 +5,10 @@ import { useAuth } from '../auth'
 import { Badge, Empty, ErrorBox, Loading } from '../components/ui'
 import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, FolderKanban, LockKeyhole, Plus, Search, Users, XCircle, PlayCircle } from 'lucide-react'
 
-const STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'DRAFT', 'PROCESSING', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'FAILED', 'CANCELLED']
+const STATUSES = ['SCHEDULED', 'IN_PROGRESS', 'DRAFT', 'PROCESSING', 'NORMALIZED', 'PENDING_REVIEW', 'APPROVED', 'REJECTED', 'FAILED', 'CANCELLED']
 
 function MeetingStatus({ status }) {
+  if (status === 'NORMALIZED') return <span className="rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">Normalized</span>
   if (status === 'SCHEDULED') return <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-3 py-1.5 text-xs font-semibold text-violet-700 ring-1 ring-inset ring-violet-200"><CalendarClock size={14} /> Scheduled</span>
   if (status === 'IN_PROGRESS') return <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-200"><PlayCircle size={14} /> In progress</span>
   if (status === 'CANCELLED') return <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-200"><XCircle size={14} /> Cancelled</span>
