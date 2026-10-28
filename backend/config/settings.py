@@ -148,8 +148,6 @@ TRANSCRIBER = os.getenv("TRANSCRIBER", "dev")
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 
 AI_ADAPTER = os.getenv("AI_ADAPTER", "mock")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "")
 
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
