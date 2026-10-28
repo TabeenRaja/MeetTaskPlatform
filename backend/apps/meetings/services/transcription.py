@@ -1,3 +1,5 @@
+from importlib.resources import path
+
 from django.conf import settings
 
 
@@ -19,13 +21,50 @@ class WhisperTranscriber:
     _model = None
 
     def transcribe(self, path, participants):
-        import whisper  # lazy import: heavy
+        import whisper
+
         if WhisperTranscriber._model is None:
-            WhisperTranscriber._model = whisper.load_model(settings.WHISPER_MODEL)
-        result = WhisperTranscriber._model.transcribe(path)
+            WhisperTranscriber._model = whisper.load_model(
+                settings.WHISPER_MODEL
+            )
+
+        # Use only this meeting's participants.
+        names = []
+        for user in participants:
+            name = user.get_full_name().strip() or user.username
+            if name not in names:
+                names.append(name)
+
+        glossary = (
+            "MeetTask, login module, authentication, authorization, "
+            "PostgreSQL, Django, database configuration, deployment, "
+            "test suites, software bugs, API."
+        )
+
+        prompt_parts = [
+            "An English software project meeting.",
+            f"Technical vocabulary: {glossary}",
+        ]
+        if names:
+            prompt_parts.append(
+                "Participant names: " + ", ".join(names) + "."
+            )
+
+        result = WhisperTranscriber._model.transcribe(
+            path,
+            language="en",
+            task="transcribe",
+            initial_prompt=" ".join(prompt_parts),
+            fp16=False,
+            temperature=0,
+            beam_size=5,
+            condition_on_previous_text=False,
+        )
+
         text = result["text"].strip()
         if not text:
             raise RuntimeError("Whisper returned an empty transcript.")
+
         return text, self.source
 
 
