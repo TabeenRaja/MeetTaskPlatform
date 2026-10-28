@@ -318,6 +318,8 @@ export default function MeetingDetail() {
   useEffect(() => { load() }, [load])
   useEffect(() => { const t = setInterval(() => setClockNow(Date.now()), 10000); return () => clearInterval(t) }, [])
 
+  useEffect(() => { setTr(null); setTrErr('') }, [id, m?.status])
+
   // Poll while the backend pipeline is running
   useEffect(() => {
     if (m?.status !== 'PROCESSING' && !m?.processing_cancel_requested) return
@@ -465,7 +467,7 @@ export default function MeetingDetail() {
   if (!m) return <Loading />
 
   const names = Object.fromEntries(m.participants.map((p) => [p.id, p.name]))
-  const canUpload = isMgr && !m.processing_cancel_requested && ['DRAFT', 'IN_PROGRESS', 'FAILED', 'REJECTED'].includes(m.status)
+  const canUpload = isMgr && !m.processing_cancel_requested && ['DRAFT', 'IN_PROGRESS', 'FAILED', 'REJECTED', 'NORMALIZED'].includes(m.status)
   const isPastMeeting = m.meeting_mode === 'past' || m.meeting_mode === 'historical'
   const isScheduled = m.status === 'SCHEDULED'
   const mayStart = isScheduled && clockNow >= new Date(m.scheduled_at).getTime()
@@ -480,7 +482,7 @@ export default function MeetingDetail() {
           <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold tracking-wide text-blue-700">MEETING WORKSPACE</span>
           {['SCHEDULED', 'IN_PROGRESS', 'CANCELLED'].includes(m.status)
             ? <span className={`rounded-full px-3 py-1 text-xs font-semibold ${m.status === 'SCHEDULED' ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.status === 'SCHEDULED' ? 'Scheduled' : m.status === 'CANCELLED' ? 'Cancelled' : 'In progress'}</span>
-            : <Badge value={m.status} />}
+            : m.status === 'NORMALIZED' ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Normalized</span> : <Badge value={m.status} />}
           {m.is_confidential && <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-white"><LockKeyhole size={12} /> Confidential</span>}
         </div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{m.title}</h1>
@@ -495,6 +497,7 @@ export default function MeetingDetail() {
         <div className="mt-4 text-xs text-slate-500">Managed by <span className="font-semibold text-slate-700">{m.manager_name}</span> · {m.participants.map((p) => p.name).join(', ') || 'No participants'}</div>
       </div>
 
+      {m.status === 'NORMALIZED' && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">Transcription and normalization complete. Open View transcript below. Summary and task extraction will be added later.</div>}
       {m.status === 'FAILED' && <ErrorBox msg={m.processing_error || 'Processing failed.'} />}
 
       {m.status === 'SCHEDULED' && (
@@ -564,7 +567,7 @@ export default function MeetingDetail() {
       )}
       {m.status === 'PROCESSING' && (
         <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5 shadow-sm sm:p-6">
-          <div className="mb-3 flex items-start gap-3"><span className="rounded-xl bg-blue-100 p-2 text-blue-700"><Sparkles size={20} className="animate-pulse" /></span><div><h2 className="font-semibold text-slate-900">Turning your meeting into action</h2><p className="mt-1 text-sm text-slate-600">Transcription and AI analysis are handled securely by the server. You can leave this page and return later.</p></div></div>
+          <div className="mb-3 flex items-start gap-3"><span className="rounded-xl bg-blue-100 p-2 text-blue-700"><Sparkles size={20} className="animate-pulse" /></span><div><h2 className="font-semibold text-slate-900">Preparing your transcript</h2><p className="mt-1 text-sm text-slate-600">Whisper transcription and normalization run locally on the backend. Processing stops after the normalized transcript is saved.</p></div></div>
           <ProcessingProgress progress={m.progress} />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white/80 px-4 py-3">
             <p className="max-w-xl text-xs text-slate-600"><Clock3 size={14} className="mr-1 inline" />{m.processing_cancel_requested ? 'Cancellation requested. Waiting for the current AI call to finish before stopping safely.' : 'Uploaded the wrong audio? Stop this processing run before generating the MoM.'}</p>
@@ -589,7 +592,7 @@ export default function MeetingDetail() {
         <Card title="Audio studio" icon={Mic2}>
           {canUpload ? (
             <div className="space-y-5">
-              <p className="text-sm text-slate-500">{isPastMeeting ? 'Upload the recording of your completed meeting to generate minutes.' : 'Choose an existing recording or capture your meeting live. Your audio is submitted for transcription after upload.'}</p>
+              <p className="text-sm text-slate-500">{isPastMeeting ? 'Upload the recording of your completed meeting to create a normalized transcript.' : 'Choose an existing recording or capture your meeting live. Your audio is submitted for transcription after upload.'}</p>
               {!isPastMeeting && <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
                 <button type="button" onClick={() => setAudioTab('upload')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-semibold transition ${audioTab === 'upload' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}><CloudUpload size={17} /> Upload audio</button>
                 <button type="button" onClick={() => setAudioTab('record')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-semibold transition ${audioTab === 'record' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}><Mic2 size={17} /> Record live</button>
@@ -623,7 +626,7 @@ export default function MeetingDetail() {
               <ErrorBox msg={upErr} />
             </div>
           ) : (
-            <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"><span className="rounded-lg bg-white p-2 text-blue-600"><CheckCircle2 size={20} /></span><div><p className="font-medium text-slate-800">{m.processing_cancel_requested ? 'Preparing for resubmission' : m.has_audio ? 'Audio submitted' : 'Audio upload unavailable'}</p><p className="mt-1 text-sm text-slate-500">{m.status === 'PROCESSING' ? 'Your recording is being processed. New uploads are disabled until the meeting changes status.' : m.processing_cancel_requested ? 'Cancelling the previous run. Uploading is available after cleanup finishes.' : 'Uploading is available after the meeting starts, or for draft, failed, and rejected meetings.'}</p></div></div>
+            <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"><span className="rounded-lg bg-white p-2 text-blue-600"><CheckCircle2 size={20} /></span><div><p className="font-medium text-slate-800">{m.processing_cancel_requested ? 'Preparing for resubmission' : m.has_audio ? 'Audio submitted' : 'Audio upload unavailable'}</p><p className="mt-1 text-sm text-slate-500">{m.status === 'PROCESSING' ? 'Your recording is being processed. New uploads are disabled until the meeting changes status.' : m.processing_cancel_requested ? 'Cancelling the previous run. Uploading is available after cleanup finishes.' : 'Uploading is available after the meeting starts, or for draft, failed, rejected, and normalized meetings.'}</p></div></div>
           )}
         </Card>
       )}
@@ -649,9 +652,9 @@ export default function MeetingDetail() {
               </div>
             )}
             <div>
-              <h3 className="text-sm font-medium">Sanitized (what the AI receives)</h3>
-              <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm">{tr.sanitized}</pre>
-              <p className="mt-1 text-xs text-gray-500">PII masking is best-effort and may not catch everything.</p>
+              <h3 className="text-sm font-medium">Normalized transcript</h3>
+              <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm">{tr.normalized}</pre>
+              <p className="mt-1 text-xs text-gray-500">Names and personal details are preserved. Only whitespace and Unicode formatting are normalized; sentences are identified locally.</p>
             </div>
           </div>
         )}
@@ -659,7 +662,7 @@ export default function MeetingDetail() {
 
       <Card title="AI-generated summary and MoM" icon={Sparkles}>
         {out ? <Output out={out} names={names} isMgr={isMgr} /> : (
-          <Empty text={isMgr ? 'No AI output yet. Upload audio to generate it.' : 'Approved outputs will appear here.'} />
+          <Empty text={isMgr ? 'Summary, MoM and action extraction are deferred. This version creates transcripts only.' : 'Approved outputs will appear here.'} />
         )}
       </Card>
 
