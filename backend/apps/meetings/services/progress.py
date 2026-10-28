@@ -7,11 +7,10 @@ from django.core.cache import cache
 # key: (label, percent when the stage starts)
 STAGES = [
     ("queued", "Getting ready", 4),
-    ("transcribing", "Turning the recording into text", 10),
-    ("masking", "Protecting private details", 58),
-    ("analyzing", "AI is reading the meeting", 68),
-    ("drafting", "Drafting minutes and action items", 94),
+    ("transcribing", "Transcribing locally with Whisper", 10),
+    ("normalizing", "Normalizing transcript locally", 85),
 ]
+
 _INDEX = {k: i for i, (k, _, _) in enumerate(STAGES)}
 
 
