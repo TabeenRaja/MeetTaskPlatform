@@ -12,6 +12,7 @@ class Meeting(models.Model):
         CANCELLED = "CANCELLED"
         IN_PROGRESS = "IN_PROGRESS"
         PROCESSING = "PROCESSING"
+        NORMALIZED = "NORMALIZED", "Normalized"
         PENDING_REVIEW = "PENDING_REVIEW"
         APPROVED = "APPROVED"
         REJECTED = "REJECTED"
@@ -57,7 +58,9 @@ class MeetingParticipant(models.Model):
 class Transcript(models.Model):
     meeting = models.OneToOneField(Meeting, on_delete=models.CASCADE, related_name="transcript")
     original_text = models.TextField()      # restricted: manager only
-    sanitized_text = models.TextField()     # what Gemini receives
+    sanitized_text = models.TextField(blank=True, default="")  # legacy only; no masking
+    normalized_text = models.TextField(blank=True, default="")
+    sentences = models.JSONField(default=list, blank=True)
     source = models.CharField(max_length=20)  # whisper | dev_adapter
     created_at = models.DateTimeField(auto_now=True)
 
