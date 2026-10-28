@@ -1,19 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Clock3, FileText, Mic, ShieldCheck, Sparkles } from 'lucide-react'
+import { Check, Clock3, FileText, Mic } from 'lucide-react'
 import './processing.css'
 
 // progress comes from the meeting API while it is PROCESSING:
 // { stage, label, percent, next_percent, elapsed, steps: [{key,label}] }  or null when the server is not tracking it.
-const SHORT = { queued: 'Start', transcribing: 'Transcribe', masking: 'Protect', analyzing: 'Analyze', drafting: 'Draft' }
-const ICON = { queued: Clock3, transcribing: Mic, masking: ShieldCheck, analyzing: Sparkles, drafting: FileText }
-// How long a stage usually takes (seconds). Used only to creep the bar smoothly between real stage changes.
-const TAU = { queued: 3, transcribing: 45, masking: 6, analyzing: 14, drafting: 5 }
+const SHORT = { queued: 'Start', transcribing: 'Transcribe', normalizing: 'Normalize' }
+const ICON = { queued: Clock3, transcribing: Mic, normalizing: FileText }
+const TAU = { queued: 3, transcribing: 45, normalizing: 6 }
 const TIPS = {
   queued: ['Getting things ready'],
-  transcribing: ['Listening to the recording', 'Writing down who said what', 'Cleaning up the text'],
-  masking: ['Swapping names for codes like P1 and P2', 'Hiding emails, phone numbers and IDs', 'Only the masked text goes to the AI'],
-  analyzing: ['Reading the masked transcript', 'Finding decisions and action items', 'Checking who owns what'],
-  drafting: ['Writing the minutes', 'Listing action items for your review', 'Almost there'],
+  transcribing: ['Processing audio locally with Whisper', 'Turning speech into text'],
+  normalizing: ['Cleaning whitespace', 'Identifying sentence boundaries', 'Preserving names, dates and negation'],
 }
 
 function Visual({ stage }) {
@@ -32,34 +29,7 @@ function Visual({ stage }) {
       </div>
     )
   }
-  if (stage === 'masking') {
-    const rows = [
-      [['38%'], ['22%', 1], ['28%']],
-      [['26%', 1], ['34%'], ['24%', 1]],
-      [['30%'], ['40%'], ['18%', 1]],
-    ]
-    return (
-      <div className="w-56 space-y-3" aria-hidden="true">
-        {rows.map((r, i) => (
-          <div key={i} className="flex gap-2">
-            {r.map(([w, red], j) => (
-              <span key={j} className={`mtp-word ${red ? 'red' : ''}`} style={{ width: w, '--d': `${(i * 3 + j) * 0.18}s` }} />
-            ))}
-          </div>
-        ))}
-      </div>
-    )
-  }
-  if (stage === 'analyzing') {
-    return (
-      <div className="relative grid h-24 w-24 place-items-center" aria-hidden="true">
-        <div className="mtp-orbit"><i /></div>
-        <div className="mtp-orbit b"><i /></div>
-        <Sparkles size={34} className="mtp-twinkle text-sky-200" />
-      </div>
-    )
-  }
-  if (stage === 'drafting') {
+  if (stage === 'normalizing') {
     return (
       <div className="w-56 space-y-3" aria-hidden="true">
         {[100, 80, 92].map((w, i) => (
@@ -129,7 +99,7 @@ export default function ProcessingProgress({ progress }) {
     >
       <div className="grid gap-6 p-6 sm:p-7 md:grid-cols-[1fr_auto] md:items-center">
         <div className="min-w-0">
-          <div className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">AI is working on this meeting</div>
+          <div className="font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-sky-300">Processing your transcript locally</div>
           <h2 className="mt-2 text-xl font-semibold tracking-tight sm:text-2xl">{progress ? progress.label : 'Processing the meeting'}</h2>
           <p key={`${stage}-${tip}`} className="mtp-fade mt-1 h-5 text-sm text-sky-100/90">
             {tips[tip % tips.length]}…
@@ -156,7 +126,7 @@ export default function ProcessingProgress({ progress }) {
         </div>
       </div>
 
-      <ol className="grid grid-cols-5 gap-1 px-4 pb-6 pt-5 sm:px-6">
+      <ol className="grid grid-cols-3 gap-1 px-4 pb-6 pt-5 sm:px-6">
         {steps.map((s, i) => {
           const Icon = ICON[s.key] || Clock3
           const done = at > i
