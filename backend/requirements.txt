@@ -9,3 +9,4 @@ spacy
 presidio-analyzer
 google-genai
 pydantic>=2
+dateparser
