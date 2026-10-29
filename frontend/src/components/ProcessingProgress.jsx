@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Clock3, FileText, Mic } from 'lucide-react'
+import { Check, Clock3, FileText, ListChecks, Mic } from 'lucide-react'
 import './processing.css'
 
 // progress comes from the meeting API while it is PROCESSING:
 // { stage, label, percent, next_percent, elapsed, steps: [{key,label}] }  or null when the server is not tracking it.
-const SHORT = { queued: 'Start', transcribing: 'Transcribe', normalizing: 'Normalize' }
-const ICON = { queued: Clock3, transcribing: Mic, normalizing: FileText }
-const TAU = { queued: 3, transcribing: 45, normalizing: 6 }
+const SHORT = { queued: 'Start', transcribing: 'Transcribe', normalizing: 'Normalize', extracting: 'Find tasks' }
+const ICON = { queued: Clock3, transcribing: Mic, normalizing: FileText, extracting: ListChecks }
+const TAU = { queued: 3, transcribing: 45, normalizing: 6, extracting: 8 }
 const TIPS = {
   queued: ['Getting things ready'],
   transcribing: ['Processing audio locally with Whisper', 'Turning speech into text'],
   normalizing: ['Cleaning whitespace', 'Identifying sentence boundaries', 'Preserving names, dates and negation'],
+  extracting: ['Reading each sentence', 'Finding who must do what', 'Reading deadlines like "by Friday"'],
 }
 
 function Visual({ stage }) {
@@ -126,7 +127,7 @@ export default function ProcessingProgress({ progress }) {
         </div>
       </div>
 
-      <ol className="grid grid-cols-3 gap-1 px-4 pb-6 pt-5 sm:px-6">
+      <ol className="grid grid-cols-4 gap-1 px-4 pb-6 pt-5 sm:px-6">
         {steps.map((s, i) => {
           const Icon = ICON[s.key] || Clock3
           const done = at > i
