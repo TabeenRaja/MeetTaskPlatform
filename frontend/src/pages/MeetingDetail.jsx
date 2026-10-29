@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom'
 import { api, errMsg } from '../api'
 import { useAuth } from '../auth'
 import { Badge, Empty, ErrorBox, Loading } from '../components/ui'
-import { ArrowLeft, CalendarClock, CalendarDays, CheckCircle2, Clock3, CloudUpload, FileAudio2, FileText, FolderKanban, LockKeyhole, Mic2, PlayCircle, RefreshCw, ShieldCheck, Sparkles, Square, Users, X } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CalendarClock, CalendarDays, CheckCircle2, Clock3, CloudUpload, FileAudio2, FileText, ChevronDown, FolderKanban, LockKeyhole, Mic2, PlayCircle, Quote, RefreshCw, ShieldCheck, Sparkles, Square, Users, X } from 'lucide-react'
 
 
 const ALLOWED = ['.mp3', '.wav', '.m4a', '.ogg', '.webm']
@@ -20,7 +20,146 @@ function Card({ title, children, icon: Icon }) {
   )
 }
 
+const PRIORITY = {
+  HIGH: { label: 'High', chip: 'bg-red-50 text-red-700 ring-red-200', dot: 'bg-red-500' },
+  MEDIUM: { label: 'Medium', chip: 'bg-blue-50 text-blue-700 ring-blue-200', dot: 'bg-blue-500' },
+  LOW: { label: 'Low', chip: 'bg-slate-100 text-slate-600 ring-slate-200', dot: 'bg-slate-400' },
+}
+const CONF = {
+  HIGH: { label: 'High', bars: 3, color: 'bg-emerald-500', text: 'text-emerald-700' },
+  MEDIUM: { label: 'Medium', bars: 2, color: 'bg-amber-500', text: 'text-amber-700' },
+  LOW: { label: 'Low', bars: 1, color: 'bg-red-500', text: 'text-red-700' },
+}
+
+function dueInfo(deadline) {
+  if (!deadline) return null
+  const [y, m, d] = deadline.split('-').map(Number)
+  const due = new Date(y, m - 1, d)
+  const now = new Date()
+  const days = Math.round((due - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000)
+  const date = due.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
+  let rel = `in ${days} days`
+  let tone = 'text-slate-500'
+  if (days < 0) { rel = `${-days} day${days === -1 ? '' : 's'} ago`; tone = 'text-red-600' }
+  else if (days === 0) { rel = 'Today'; tone = 'text-amber-600' }
+  else if (days === 1) { rel = 'Tomorrow'; tone = 'text-amber-600' }
+  return { date, rel, tone }
+}
+
+function initials(name) {
+  return (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '?'
+}
+
+function ActionCard({ a, index, owner, isMgr }) {
+  const [open, setOpen] = useState(false)
+  const pr = PRIORITY[a.priority] || PRIORITY.MEDIUM
+  const cf = CONF[a.confidence] || CONF.MEDIUM
+  const due = dueInfo(a.deadline)
+  const long = (a.source_context || '').length > 150
+  return (
+    <article className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:shadow-md ${a.discard ? 'border-slate-200 opacity-50' : a.needs_review ? 'border-amber-300' : 'border-slate-200'}`}>
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start gap-3.5">
+          <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${a.needs_review ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-700'}`}>{index + 1}</span>
+          <div className="min-w-0 flex-1">
+            <h4 className="break-words text-[15px] font-semibold leading-6 text-slate-900">{a.title}</h4>
+            {a.description && <p className="mt-1 text-sm leading-6 text-slate-600">{a.description}</p>}
+          </div>
+          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${pr.chip}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${pr.dot}`} /> {pr.label}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+          <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${owner ? 'bg-slate-50' : 'border border-dashed border-amber-300 bg-amber-50/60'}`}>
+            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${owner ? 'bg-blue-600 text-white' : 'bg-amber-200 text-amber-800'}`}>{owner ? initials(owner) : '?'}</span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Owner</p>
+              <p className={`truncate text-sm font-medium ${owner ? 'text-slate-800' : 'text-amber-800'}`}>{owner || 'Not assigned'}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200"><CalendarDays size={14} /></span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Due</p>
+              {due ? (
+                <p className="truncate text-sm font-medium text-slate-800">{due.date} <span className={`text-xs font-semibold ${due.tone}`}>· {due.rel}</span></p>
+              ) : (
+                <p className="text-sm font-medium text-slate-400">No deadline</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
+            <span className="flex h-7 w-7 shrink-0 items-end justify-center gap-0.5 rounded-full bg-white px-1.5 pb-2 ring-1 ring-slate-200" aria-hidden="true">
+              {[1, 2, 3].map((n) => <span key={n} className={`w-1 rounded-sm ${n <= cf.bars ? cf.color : 'bg-slate-200'}`} style={{ height: 4 + n * 3 }} />)}
+            </span>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Confidence</p>
+              <p className={`text-sm font-medium ${cf.text}`}>{cf.label}</p>
+            </div>
+          </div>
+        </div>
+
+        {a.uncertainty_note && (
+          <div className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-5 text-amber-900">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-600" />
+            <p><span className="font-semibold">Please check: </span>{a.uncertainty_note}</p>
+          </div>
+        )}
+
+        {isMgr && a.source_context && (
+          <div className="mt-3.5 rounded-xl bg-slate-50 px-3.5 py-3">
+            <div className="flex items-start gap-2.5">
+              <Quote size={14} className="mt-1 shrink-0 text-slate-400" />
+              <div className="min-w-0 flex-1">
+                <p className={`text-xs leading-5 text-slate-600 ${open ? '' : 'line-clamp-2'}`}>{a.source_context}</p>
+                {long && (
+                  <button type="button" onClick={() => setOpen((o) => !o)} className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline">
+                    {open ? 'Show less' : 'Show more'} <ChevronDown size={12} className={open ? 'rotate-180' : ''} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {a.discard && <p className="mt-3 text-xs font-medium text-slate-500">Discarded</p>}
+      </div>
+    </article>
+  )
+}
+
+function ActionItems({ items, names, isMgr }) {
+  const active = items.filter((a) => !a.discard)
+  const review = active.filter((a) => a.needs_review).length
+  const unassigned = active.filter((a) => !(a.assignee_name || names[a.assignee_id])).length
+  return (
+    <section>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Tasks found</h3>
+          <p className="mt-1 text-xs text-slate-500">Check each task, then approve to create them.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+          <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">{active.length} {active.length === 1 ? 'task' : 'tasks'}</span>
+          {review > 0 && <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">{review} to check</span>}
+          {unassigned > 0 && <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{unassigned} without owner</span>}
+        </div>
+      </div>
+      {items.length === 0 && <Empty text="No tasks were found in this meeting." />}
+      <div className="grid gap-3.5">
+        {items.map((a, i) => (
+          <ActionCard key={i} a={a} index={i} owner={a.assignee_name || names[a.assignee_id] || ''} isMgr={isMgr} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
 function Output({ out, names, isMgr }) {
+  const rulesOnly = out.generated_by === "rules"
   const sectionClass = "rounded-xl border border-slate-200 bg-slate-50/60 p-5"
 
   return (
@@ -37,24 +176,25 @@ function Output({ out, names, isMgr }) {
               Meeting Intelligence
             </p>
             <p className="text-xs text-slate-500">
-              AI-generated meeting documentation
+              {rulesOnly ? "Tasks found in the transcript" : "Meeting documentation"}
             </p>
           </div>
         </div>
 
-        <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-          {out.generated_by === "gemini"
-            ? "Generated by Gemini"
-            : "Development output"}
-        </span>
+        {!rulesOnly && (
+          <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+            Development output
+          </span>
+        )}
       </div>
 
       {out.generated_by === "mock" && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          Development adapter output. This was not generated by Gemini.
+          Development output.
         </p>
       )}
 
+      {!rulesOnly && (<>
       {/* SUMMARY */}
       <section className={sectionClass}>
         <div className="mb-3 flex items-center gap-2">
@@ -148,115 +288,10 @@ function Output({ out, names, isMgr }) {
         </section>
       </div>
 
+      </>)}
+
       {/* ACTION ITEMS */}
-      <section>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-base font-semibold text-slate-900">
-              Action Items
-            </h3>
-            <p className="mt-1 text-xs text-slate-500">
-              Tasks identified from the meeting conversation
-            </p>
-          </div>
-
-          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-            {out.action_items.filter(a => !a.discard).length} active
-          </span>
-        </div>
-
-        {out.action_items.length === 0 && (
-          <Empty text="No action items." />
-        )}
-
-        <div className="grid gap-3">
-          {out.action_items.map((a, i) => (
-            <div
-              key={i}
-              className={`overflow-hidden rounded-xl border bg-white shadow-sm transition-shadow hover:shadow-md ${
-                a.discard
-                  ? "border-slate-200 opacity-50"
-                  : a.needs_review
-                    ? "border-amber-300"
-                    : "border-blue-200"
-              }`}
-            >
-              <div className="flex">
-                <div
-                  className={`w-1 shrink-0 ${
-                    a.needs_review ? "bg-amber-400" : "bg-blue-500"
-                  }`}
-                />
-
-                <div className="min-w-0 flex-1 p-4 sm:p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex-1">
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        Action {String(i + 1).padStart(2, "0")}
-                      </p>
-                      <h4 className="font-semibold leading-6 text-slate-900">
-                        {a.title}
-                      </h4>
-                    </div>
-
-                    <Badge value={a.priority} />
-                  </div>
-
-                  {a.description && (
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {a.description}
-                    </p>
-                  )}
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <span className="inline-flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800">
-                      <Users size={14} />
-                      {a.assignee_name ||
-                        names[a.assignee_id] ||
-                        "Unresolved"}
-                    </span>
-
-                    <span className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700">
-                      <CalendarDays size={14} />
-                      {a.deadline || "No deadline"}
-                    </span>
-
-                    {a.needs_review && (
-                      <span className="rounded-lg bg-amber-100 px-3 py-2 text-xs font-medium text-amber-800">
-                        Needs review
-                      </span>
-                    )}
-                  </div>
-
-                  {a.uncertainty_note && (
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-5 text-amber-800">
-                      <span className="font-semibold">Review note: </span>
-                      {a.uncertainty_note}
-                    </div>
-                  )}
-
-                  {isMgr && a.source_context && (
-                    <div className="mt-4 border-t border-slate-100 pt-3">
-                      <p className="text-xs italic leading-5 text-slate-500">
-                        <span className="font-semibold not-italic">
-                          Transcript reference:{" "}
-                        </span>
-                        {a.source_context}
-                      </p>
-                    </div>
-                  )}
-
-                  {a.discard && (
-                    <p className="mt-2 text-xs font-medium text-slate-500">
-                      Discarded
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <ActionItems items={out.action_items} names={names} isMgr={isMgr} />
 
       {out.generated_by === "gemini" && (
         <p className="text-xs text-slate-400">
@@ -497,7 +532,7 @@ export default function MeetingDetail() {
         <div className="mt-4 text-xs text-slate-500">Managed by <span className="font-semibold text-slate-700">{m.manager_name}</span> · {m.participants.map((p) => p.name).join(', ') || 'No participants'}</div>
       </div>
 
-      {m.status === 'NORMALIZED' && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">Transcription and normalization complete. Open View transcript below. Summary and task extraction will be added later.</div>}
+      {m.status === 'NORMALIZED' && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{m.processing_error || 'Transcript is ready. Open View transcript below.'}</div>}
       {m.status === 'FAILED' && <ErrorBox msg={m.processing_error || 'Processing failed.'} />}
 
       {m.status === 'SCHEDULED' && (
@@ -580,7 +615,7 @@ export default function MeetingDetail() {
       {canReview && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
           <span className="text-sm text-blue-900">
-            {m.status === 'REJECTED' ? 'This output was rejected. You can revise and resubmit it.' : 'AI-generated draft is waiting for your review. No tasks exist until you approve.'}
+            {m.status === 'REJECTED' ? 'This output was rejected. You can revise and resubmit it.' : 'Tasks found in the transcript are waiting for your review. No tasks exist until you approve.'}
           </span>
           <Link to={`/meetings/${m.id}/review`} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800">
             Review and approve
@@ -660,9 +695,9 @@ export default function MeetingDetail() {
         )}
       </Card>
 
-      <Card title="AI-generated summary and MoM" icon={Sparkles}>
+      <Card title="Tasks found in the meeting" icon={Sparkles}>
         {out ? <Output out={out} names={names} isMgr={isMgr} /> : (
-          <Empty text={isMgr ? 'Summary, MoM and action extraction are deferred. This version creates transcripts only.' : 'Approved outputs will appear here.'} />
+          <Empty text={isMgr ? 'No tasks were found yet. Upload a recording to extract tasks.' : 'Approved outputs will appear here.'} />
         )}
       </Card>
 
