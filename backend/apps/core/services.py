@@ -16,7 +16,9 @@ def notify(user, kind, title, message="", link="", dedupe_key=None):
         return None
     n = Notification.objects.create(user=user, kind=kind, title=title, message=message,
                                     link=link, dedupe_key=dedupe_key)
-    if settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD and user.email:
+    # The console/dummy/locmem backends only print or discard mail: do not pretend an email was sent.
+    real_backend = not any(x in (settings.EMAIL_BACKEND or "") for x in ("console", "dummy", "locmem", "filebased"))
+    if real_backend and settings.EMAIL_HOST_USER and settings.EMAIL_HOST_PASSWORD and user.email:
         try:
             send_mail(title, message or title, settings.DEFAULT_FROM_EMAIL, [user.email])
             n.email_status = "SENT"
