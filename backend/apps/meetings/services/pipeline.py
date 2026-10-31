@@ -1,4 +1,4 @@
-"""Whisper -> local normalization -> local rule-based task extraction -> manager review. No LLM."""
+"""Whisper -> local normalization -> local task extraction + extractive summary/minutes -> manager review. No LLM."""
 import logging
 import threading
 
@@ -7,7 +7,7 @@ from django.db import close_old_connections, transaction
 from apps.core.services import audit
 from apps.core.services import notify
 from ..models import AIOutput, Meeting, Transcript
-from . import extraction, progress
+from . import extraction, progress, summary as summarizer
 from .normalization import normalize_transcript
 from .transcription import get_transcriber
 
@@ -81,7 +81,7 @@ def run(meeting_id):
             locked.save(update_fields=["processing_error"])
             audit(None, "TRANSCRIPT_NORMALIZED", locked, source=source)
 
-        # Local rule-based task extraction (spaCy + dateparser). Tasks only: no summary, no minutes.
+        # Local rule-based task extraction (spaCy + dateparser), then a local extractive summary and minutes.
         progress.set_stage(m.id, "extracting")
         try:
             items = run_extraction(m, result["sentences"] or result["normalized_text"], users)
@@ -92,7 +92,13 @@ def run(meeting_id):
                 processing_error="Task extraction failed. The transcript is saved. Check server logs.")
             return
         check_not_cancelled(meeting_id)
-        publish_items(m.id, items)
+        # Summary and minutes are a bonus: if they fail, the tasks are still published.
+        try:
+            docs = build_documents(m, result["sentences"] or result["normalized_text"], items, users)
+        except Exception:
+            logger.exception("Meeting %s summary generation failed", meeting_id)
+            docs = None
+        publish_items(m.id, items, docs)
     except ProcessingCancelled:
         finish_cancelled(meeting_id)
     except Exception:
@@ -120,7 +126,14 @@ def run_extraction(meeting, sentences, users):
     return items
 
 
-def publish_items(meeting_id, items):
+def build_documents(meeting, sentences, items, users):
+    """Return {"summary", "mom", "discussion_points", "decisions"} for one meeting (local, extractive)."""
+    names = [(u.get_full_name() or u.username).strip() for u in users]
+    return summarizer.build_summary(sentences, items, meeting, names)
+
+
+def publish_items(meeting_id, items, docs=None):
+    docs = docs or {}
     with transaction.atomic():
         locked = Meeting.objects.select_for_update().get(pk=meeting_id)
         if locked.processing_cancel_requested or locked.status not in (Meeting.Status.PROCESSING, Meeting.Status.NORMALIZED):
@@ -128,8 +141,10 @@ def publish_items(meeting_id, items):
         last = locked.outputs.order_by("-version").first()
         out = AIOutput.objects.create(
             meeting=locked, version=(last.version + 1) if last else 1,
-            status=AIOutput.Status.PENDING_REVIEW, summary="", mom="", discussion_points=[], decisions=[],
-            action_items=items, generated_by="rules", model_name=extraction.MODEL_NAME)
+            status=AIOutput.Status.PENDING_REVIEW, summary=docs.get("summary", ""), mom=docs.get("mom", ""),
+            discussion_points=docs.get("discussion_points", []), decisions=docs.get("decisions", []),
+            action_items=items, generated_by="rules",
+            model_name=extraction.MODEL_NAME + ("+" + summarizer.MODEL_NAME if docs else ""))
         locked.status = Meeting.Status.PENDING_REVIEW
         locked.processing_error = ""
         locked.save(update_fields=["status", "processing_error"])
