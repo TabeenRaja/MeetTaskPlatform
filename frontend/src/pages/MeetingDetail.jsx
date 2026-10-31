@@ -1,102 +1,217 @@
-import Recorder from '../components/Recorder'
-import ProcessingProgress from '../components/ProcessingProgress'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { api, errMsg } from '../api'
-import { useAuth } from '../auth'
-import { Badge, Empty, ErrorBox, Loading } from '../components/ui'
-import { AlertTriangle, ArrowLeft, CalendarClock, CalendarDays, CheckCircle2, Clock3, CloudUpload, FileAudio2, FileText, ChevronDown, FolderKanban, LockKeyhole, Mic2, PlayCircle, Quote, RefreshCw, ShieldCheck, Sparkles, Square, Users, X } from 'lucide-react'
+import Recorder from "../components/Recorder";
+import ProcessingProgress from "../components/ProcessingProgress";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { api, errMsg } from "../api";
+import { useAuth } from "../auth";
+import { Badge, Empty, ErrorBox, Loading } from "../components/ui";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CalendarClock,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  CloudUpload,
+  FileAudio2,
+  FileText,
+  ChevronDown,
+  FolderKanban,
+  LockKeyhole,
+  Mic2,
+  PlayCircle,
+  Quote,
+  RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Square,
+  Users,
+  X,
+} from "lucide-react";
 
-
-const ALLOWED = ['.mp3', '.wav', '.m4a', '.ogg', '.webm']
-const MAX_MB = 50
+const ALLOWED = [".mp3", ".wav", ".m4a", ".ogg", ".webm"];
+const MAX_MB = 50;
 
 function Card({ title, children, icon: Icon }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-slate-900">{Icon && <Icon size={18} className="text-blue-600" />}{title}</h2>
+      <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-slate-900">
+        {Icon && <Icon size={18} className="text-blue-600" />}
+        {title}
+      </h2>
       {children}
     </section>
-  )
+  );
 }
 
 const PRIORITY = {
-  HIGH: { label: 'High', chip: 'bg-red-50 text-red-700 ring-red-200', dot: 'bg-red-500' },
-  MEDIUM: { label: 'Medium', chip: 'bg-blue-50 text-blue-700 ring-blue-200', dot: 'bg-blue-500' },
-  LOW: { label: 'Low', chip: 'bg-slate-100 text-slate-600 ring-slate-200', dot: 'bg-slate-400' },
-}
+  HIGH: {
+    label: "High",
+    chip: "bg-red-50 text-red-700 ring-red-200",
+    dot: "bg-red-500",
+  },
+  MEDIUM: {
+    label: "Medium",
+    chip: "bg-blue-50 text-blue-700 ring-blue-200",
+    dot: "bg-blue-500",
+  },
+  LOW: {
+    label: "Low",
+    chip: "bg-slate-100 text-slate-600 ring-slate-200",
+    dot: "bg-slate-400",
+  },
+};
 const CONF = {
-  HIGH: { label: 'High', bars: 3, color: 'bg-emerald-500', text: 'text-emerald-700' },
-  MEDIUM: { label: 'Medium', bars: 2, color: 'bg-amber-500', text: 'text-amber-700' },
-  LOW: { label: 'Low', bars: 1, color: 'bg-red-500', text: 'text-red-700' },
-}
+  HIGH: {
+    label: "High",
+    bars: 3,
+    color: "bg-emerald-500",
+    text: "text-emerald-700",
+  },
+  MEDIUM: {
+    label: "Medium",
+    bars: 2,
+    color: "bg-amber-500",
+    text: "text-amber-700",
+  },
+  LOW: { label: "Low", bars: 1, color: "bg-red-500", text: "text-red-700" },
+};
 
 function dueInfo(deadline) {
-  if (!deadline) return null
-  const [y, m, d] = deadline.split('-').map(Number)
-  const due = new Date(y, m - 1, d)
-  const now = new Date()
-  const days = Math.round((due - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000)
-  const date = due.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-  let rel = `in ${days} days`
-  let tone = 'text-slate-500'
-  if (days < 0) { rel = `${-days} day${days === -1 ? '' : 's'} ago`; tone = 'text-red-600' }
-  else if (days === 0) { rel = 'Today'; tone = 'text-amber-600' }
-  else if (days === 1) { rel = 'Tomorrow'; tone = 'text-amber-600' }
-  return { date, rel, tone }
+  if (!deadline) return null;
+  const [y, m, d] = deadline.split("-").map(Number);
+  const due = new Date(y, m - 1, d);
+  const now = new Date();
+  const days = Math.round(
+    (due - new Date(now.getFullYear(), now.getMonth(), now.getDate())) /
+      86400000,
+  );
+  const date = due.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  let rel = `in ${days} days`;
+  let tone = "text-slate-500";
+  if (days < 0) {
+    rel = `${-days} day${days === -1 ? "" : "s"} ago`;
+    tone = "text-red-600";
+  } else if (days === 0) {
+    rel = "Today";
+    tone = "text-amber-600";
+  } else if (days === 1) {
+    rel = "Tomorrow";
+    tone = "text-amber-600";
+  }
+  return { date, rel, tone };
 }
 
 function initials(name) {
-  return (name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '?'
+  return (
+    (name || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0].toUpperCase())
+      .join("") || "?"
+  );
 }
 
 function ActionCard({ a, index, owner, isMgr }) {
-  const [open, setOpen] = useState(false)
-  const pr = PRIORITY[a.priority] || PRIORITY.MEDIUM
-  const cf = CONF[a.confidence] || CONF.MEDIUM
-  const due = dueInfo(a.deadline)
-  const long = (a.source_context || '').length > 150
+  const [open, setOpen] = useState(false);
+  const pr = PRIORITY[a.priority] || PRIORITY.MEDIUM;
+  const cf = CONF[a.confidence] || CONF.MEDIUM;
+  const due = dueInfo(a.deadline);
+  const long = (a.source_context || "").length > 150;
   return (
-    <article className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:shadow-md ${a.discard ? 'border-slate-200 opacity-50' : a.needs_review ? 'border-amber-300' : 'border-slate-200'}`}>
+    <article
+      className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition hover:shadow-md ${a.discard ? "border-slate-200 opacity-50" : a.needs_review ? "border-amber-300" : "border-slate-200"}`}
+    >
       <div className="p-4 sm:p-5">
         <div className="flex items-start gap-3.5">
-          <span className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${a.needs_review ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-700'}`}>{index + 1}</span>
+          <span
+            className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${a.needs_review ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700"}`}
+          >
+            {index + 1}
+          </span>
           <div className="min-w-0 flex-1">
-            <h4 className="break-words text-[15px] font-semibold leading-6 text-slate-900">{a.title}</h4>
-            {a.description && <p className="mt-1 text-sm leading-6 text-slate-600">{a.description}</p>}
+            <h4 className="break-words text-[15px] font-semibold leading-6 text-slate-900">
+              {a.title}
+            </h4>
+            {a.description && (
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                {a.description}
+              </p>
+            )}
           </div>
-          <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${pr.chip}`}>
+          <span
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${pr.chip}`}
+          >
             <span className={`h-1.5 w-1.5 rounded-full ${pr.dot}`} /> {pr.label}
           </span>
         </div>
 
         <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
-          <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${owner ? 'bg-slate-50' : 'border border-dashed border-amber-300 bg-amber-50/60'}`}>
-            <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${owner ? 'bg-blue-600 text-white' : 'bg-amber-200 text-amber-800'}`}>{owner ? initials(owner) : '?'}</span>
+          <div
+            className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${owner ? "bg-slate-50" : "border border-dashed border-amber-300 bg-amber-50/60"}`}
+          >
+            <span
+              className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${owner ? "bg-blue-600 text-white" : "bg-amber-200 text-amber-800"}`}
+            >
+              {owner ? initials(owner) : "?"}
+            </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Owner</p>
-              <p className={`truncate text-sm font-medium ${owner ? 'text-slate-800' : 'text-amber-800'}`}>{owner || 'Not assigned'}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Owner
+              </p>
+              <p
+                className={`truncate text-sm font-medium ${owner ? "text-slate-800" : "text-amber-800"}`}
+              >
+                {owner || "Not assigned"}
+              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
-            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200"><CalendarDays size={14} /></span>
+            <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200">
+              <CalendarDays size={14} />
+            </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Due</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Due
+              </p>
               {due ? (
-                <p className="truncate text-sm font-medium text-slate-800">{due.date} <span className={`text-xs font-semibold ${due.tone}`}>· {due.rel}</span></p>
+                <p className="truncate text-sm font-medium text-slate-800">
+                  {due.date}{" "}
+                  <span className={`text-xs font-semibold ${due.tone}`}>
+                    · {due.rel}
+                  </span>
+                </p>
               ) : (
-                <p className="text-sm font-medium text-slate-400">No deadline</p>
+                <p className="text-sm font-medium text-slate-400">
+                  No deadline
+                </p>
               )}
             </div>
           </div>
 
           <div className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5">
-            <span className="flex h-7 w-7 shrink-0 items-end justify-center gap-0.5 rounded-full bg-white px-1.5 pb-2 ring-1 ring-slate-200" aria-hidden="true">
-              {[1, 2, 3].map((n) => <span key={n} className={`w-1 rounded-sm ${n <= cf.bars ? cf.color : 'bg-slate-200'}`} style={{ height: 4 + n * 3 }} />)}
+            <span
+              className="flex h-7 w-7 shrink-0 items-end justify-center gap-0.5 rounded-full bg-white px-1.5 pb-2 ring-1 ring-slate-200"
+              aria-hidden="true"
+            >
+              {[1, 2, 3].map((n) => (
+                <span
+                  key={n}
+                  className={`w-1 rounded-sm ${n <= cf.bars ? cf.color : "bg-slate-200"}`}
+                  style={{ height: 4 + n * 3 }}
+                />
+              ))}
             </span>
             <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Confidence</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Confidence
+              </p>
               <p className={`text-sm font-medium ${cf.text}`}>{cf.label}</p>
             </div>
           </div>
@@ -104,8 +219,14 @@ function ActionCard({ a, index, owner, isMgr }) {
 
         {a.uncertainty_note && (
           <div className="mt-3.5 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs leading-5 text-amber-900">
-            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-600" />
-            <p><span className="font-semibold">Please check: </span>{a.uncertainty_note}</p>
+            <AlertTriangle
+              size={15}
+              className="mt-0.5 shrink-0 text-amber-600"
+            />
+            <p>
+              <span className="font-semibold">Please check: </span>
+              {a.uncertainty_note}
+            </p>
           </div>
         )}
 
@@ -114,10 +235,22 @@ function ActionCard({ a, index, owner, isMgr }) {
             <div className="flex items-start gap-2.5">
               <Quote size={14} className="mt-1 shrink-0 text-slate-400" />
               <div className="min-w-0 flex-1">
-                <p className={`text-xs leading-5 text-slate-600 ${open ? '' : 'line-clamp-2'}`}>{a.source_context}</p>
+                <p
+                  className={`text-xs leading-5 text-slate-600 ${open ? "" : "line-clamp-2"}`}
+                >
+                  {a.source_context}
+                </p>
                 {long && (
-                  <button type="button" onClick={() => setOpen((o) => !o)} className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline">
-                    {open ? 'Show less' : 'Show more'} <ChevronDown size={12} className={open ? 'rotate-180' : ''} />
+                  <button
+                    type="button"
+                    onClick={() => setOpen((o) => !o)}
+                    className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:underline"
+                  >
+                    {open ? "Show less" : "Show more"}{" "}
+                    <ChevronDown
+                      size={12}
+                      className={open ? "rotate-180" : ""}
+                    />
                   </button>
                 )}
               </div>
@@ -125,46 +258,72 @@ function ActionCard({ a, index, owner, isMgr }) {
           </div>
         )}
 
-        {a.discard && <p className="mt-3 text-xs font-medium text-slate-500">Discarded</p>}
+        {a.discard && (
+          <p className="mt-3 text-xs font-medium text-slate-500">Discarded</p>
+        )}
       </div>
     </article>
-  )
+  );
 }
 
 function ActionItems({ items, names, isMgr }) {
-  const active = items.filter((a) => !a.discard)
-  const review = active.filter((a) => a.needs_review).length
-  const unassigned = active.filter((a) => !(a.assignee_name || names[a.assignee_id])).length
+  const active = items.filter((a) => !a.discard);
+  const review = active.filter((a) => a.needs_review).length;
+  const unassigned = active.filter(
+    (a) => !(a.assignee_name || names[a.assignee_id]),
+  ).length;
   return (
     <section>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold text-slate-900">Tasks found</h3>
-          <p className="mt-1 text-xs text-slate-500">Check each task, then approve to create them.</p>
+          <h3 className="text-base font-semibold text-slate-900">
+            Tasks found
+          </h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Check each task, then approve to create them.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-          <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">{active.length} {active.length === 1 ? 'task' : 'tasks'}</span>
-          {review > 0 && <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">{review} to check</span>}
-          {unassigned > 0 && <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{unassigned} without owner</span>}
+          <span className="rounded-full bg-blue-100 px-3 py-1 text-blue-700">
+            {active.length} {active.length === 1 ? "task" : "tasks"}
+          </span>
+          {review > 0 && (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-800">
+              {review} to check
+            </span>
+          )}
+          {unassigned > 0 && (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">
+              {unassigned} without owner
+            </span>
+          )}
         </div>
       </div>
-      {items.length === 0 && <Empty text="No tasks were found in this meeting." />}
+      {items.length === 0 && (
+        <Empty text="No tasks were found in this meeting." />
+      )}
       <div className="grid gap-3.5">
         {items.map((a, i) => (
-          <ActionCard key={i} a={a} index={i} owner={a.assignee_name || names[a.assignee_id] || ''} isMgr={isMgr} />
+          <ActionCard
+            key={i}
+            a={a}
+            index={i}
+            owner={a.assignee_name || names[a.assignee_id] || ""}
+            isMgr={isMgr}
+          />
         ))}
       </div>
     </section>
-  )
+  );
 }
 
 function Output({ out, names, isMgr }) {
-  const rulesOnly = out.generated_by === "rules"
-  const sectionClass = "rounded-xl border border-slate-200 bg-slate-50/60 p-5"
+  // Local rules output now carries a summary and minutes too; show them whenever they exist.
+  const hasDocs = Boolean(out.summary || out.mom);
+  const sectionClass = "rounded-xl border border-slate-200 bg-slate-50/60 p-5";
 
   return (
     <div className="space-y-6">
-
       {/* AI INFORMATION */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
         <div className="flex items-center gap-2">
@@ -176,14 +335,18 @@ function Output({ out, names, isMgr }) {
               Meeting Intelligence
             </p>
             <p className="text-xs text-slate-500">
-              {rulesOnly ? "Tasks found in the transcript" : "Meeting documentation"}
+              {hasDocs
+                ? "Meeting documentation"
+                : "Tasks found in the transcript"}
             </p>
           </div>
         </div>
 
-        {!rulesOnly && (
+        {hasDocs && (
           <span className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-            Development output
+            {out.generated_by === "rules"
+              ? "Generated locally"
+              : "Development output"}
           </span>
         )}
       </div>
@@ -194,362 +357,550 @@ function Output({ out, names, isMgr }) {
         </p>
       )}
 
-      {!rulesOnly && (<>
-      {/* SUMMARY */}
-      <section className={sectionClass}>
-        <div className="mb-3 flex items-center gap-2">
-          <span className="rounded-lg bg-blue-100 p-2 text-blue-700">
-            <FileText size={17} />
-          </span>
-          <h3 className="font-semibold text-slate-900">
-            Executive Summary
-          </h3>
-        </div>
-
-        <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
-          {out.summary}
-        </p>
-      </section>
-
-      {/* MINUTES */}
-      <section className={sectionClass}>
-        <div className="mb-3 flex items-center gap-2">
-          <span className="rounded-lg bg-blue-100 p-2 text-blue-700">
-            <CalendarDays size={17} />
-          </span>
-          <h3 className="font-semibold text-slate-900">
-            Minutes of Meeting
-          </h3>
-          <span className="ml-auto rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-            Draft
-          </span>
-        </div>
-
-        <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
-          {out.mom}
-        </p>
-      </section>
-
-      {/* DISCUSSIONS AND DECISIONS */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className={sectionClass}>
-          <div className="mb-4 flex items-center gap-2">
-            <span className="rounded-lg bg-blue-100 p-2 text-blue-700">
-              <Users size={17} />
-            </span>
-            <h3 className="font-semibold text-slate-900">
-              Key Discussions
-            </h3>
-          </div>
-
-          <div className="space-y-3">
-            {out.discussion_points.map((point, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
-                  {i + 1}
-                </span>
-                <p className="text-sm leading-6 text-slate-700">
-                  {point}
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className={sectionClass}>
-          <div className="mb-4 flex items-center gap-2">
-            <span className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
-              <CheckCircle2 size={17} />
-            </span>
-            <h3 className="font-semibold text-slate-900">
-              Key Decisions
-            </h3>
-          </div>
-
-          {out.decisions.length ? (
-            <div className="space-y-3">
-              {out.decisions.map((decision, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <CheckCircle2
-                    size={17}
-                    className="mt-1 shrink-0 text-emerald-600"
-                  />
-                  <p className="text-sm leading-6 text-slate-700">
-                    {decision}
-                  </p>
-                </div>
-              ))}
+      {hasDocs && (
+        <>
+          {/* SUMMARY */}
+          <section className={sectionClass}>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                <FileText size={17} />
+              </span>
+              <h3 className="font-semibold text-slate-900">
+                Executive Summary
+              </h3>
             </div>
-          ) : (
-            <p className="text-sm text-slate-400">
-              No explicit decisions recorded.
-            </p>
-          )}
-        </section>
-      </div>
 
-      </>)}
+            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+              {out.summary}
+            </p>
+          </section>
+
+          {/* MINUTES */}
+          <section className={sectionClass}>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                <CalendarDays size={17} />
+              </span>
+              <h3 className="font-semibold text-slate-900">
+                Minutes of Meeting
+              </h3>
+              <span className="ml-auto rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                Draft
+              </span>
+            </div>
+
+            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">
+              {out.mom}
+            </p>
+          </section>
+
+          {/* DISCUSSIONS AND DECISIONS */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <section className={sectionClass}>
+              <div className="mb-4 flex items-center gap-2">
+                <span className="rounded-lg bg-blue-100 p-2 text-blue-700">
+                  <Users size={17} />
+                </span>
+                <h3 className="font-semibold text-slate-900">
+                  Key Discussions
+                </h3>
+              </div>
+
+              <div className="space-y-3">
+                {out.discussion_points.map((point, i) => (
+                  <div key={i} className="flex items-start gap-3">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                      {i + 1}
+                    </span>
+                    <p className="text-sm leading-6 text-slate-700">{point}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className={sectionClass}>
+              <div className="mb-4 flex items-center gap-2">
+                <span className="rounded-lg bg-emerald-100 p-2 text-emerald-700">
+                  <CheckCircle2 size={17} />
+                </span>
+                <h3 className="font-semibold text-slate-900">Key Decisions</h3>
+              </div>
+
+              {out.decisions.length ? (
+                <div className="space-y-3">
+                  {out.decisions.map((decision, i) => (
+                    <div key={i} className="flex items-start gap-3">
+                      <CheckCircle2
+                        size={17}
+                        className="mt-1 shrink-0 text-emerald-600"
+                      />
+                      <p className="text-sm leading-6 text-slate-700">
+                        {decision}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">
+                  No explicit decisions recorded.
+                </p>
+              )}
+            </section>
+          </div>
+        </>
+      )}
 
       {/* ACTION ITEMS */}
       <ActionItems items={out.action_items} names={names} isMgr={isMgr} />
 
+      {out.generated_by === "rules" && hasDocs && (
+        <p className="text-xs text-slate-400">
+          The summary and minutes are selected automatically from the transcript
+          and may miss context. Manager verification is required before
+          approval.
+        </p>
+      )}
+
       {out.generated_by === "gemini" && (
         <p className="text-xs text-slate-400">
-          AI-generated content may contain inaccuracies.
-          Manager verification is required before approval.
+          AI-generated content may contain inaccuracies. Manager verification is
+          required before approval.
         </p>
       )}
     </div>
-  )
+  );
 }
 
 export default function MeetingDetail() {
-  const { id } = useParams()
-  const { user } = useAuth()
-  const isMgr = user.role === 'MANAGER'
-  const [m, setM] = useState(null)
-  const [out, setOut] = useState(null)
-  const [tasks, setTasks] = useState([])
-  const [tr, setTr] = useState(null)
-  const [trErr, setTrErr] = useState('')
-  const [err, setErr] = useState('')
-  const [upErr, setUpErr] = useState('')
-  const [uploading, setUploading] = useState(false)
-  const fileRef = useRef()
-  const uploadController = useRef(null)
-  const [uploadPercent, setUploadPercent] = useState(0)
-  const [dragging, setDragging] = useState(false)
-  const [audioTab, setAudioTab] = useState('upload')
-  const [uploadName, setUploadName] = useState('')
-  const [uploadNotice, setUploadNotice] = useState('')
-  const [stoppingProcessing, setStoppingProcessing] = useState(false)
-  const [processingStopError, setProcessingStopError] = useState('')
-  const [cancelledLocally, setCancelledLocally] = useState(false)
-  const [starting, setStarting] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
-  const [clockNow, setClockNow] = useState(() => Date.now())
-  const [startError, setStartError] = useState('')
-  const [editing, setEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [editError, setEditError] = useState('')
-  const [employees, setEmployees] = useState([])
-  const [editForm, setEditForm] = useState({ title: '', description: '', scheduled_at: '', location: '', participant_ids: [] })
+  const { id } = useParams();
+  const { user } = useAuth();
+  const isMgr = user.role === "MANAGER";
+  const [m, setM] = useState(null);
+  const [out, setOut] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [tr, setTr] = useState(null);
+  const [trErr, setTrErr] = useState("");
+  const [err, setErr] = useState("");
+  const [upErr, setUpErr] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef();
+  const uploadController = useRef(null);
+  const [uploadPercent, setUploadPercent] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [audioTab, setAudioTab] = useState("upload");
+  const [uploadName, setUploadName] = useState("");
+  const [uploadNotice, setUploadNotice] = useState("");
+  const [stoppingProcessing, setStoppingProcessing] = useState(false);
+  const [processingStopError, setProcessingStopError] = useState("");
+  const [cancelledLocally, setCancelledLocally] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [startError, setStartError] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [employees, setEmployees] = useState([]);
+  const [editForm, setEditForm] = useState({
+    title: "",
+    description: "",
+    scheduled_at: "",
+    location: "",
+    participant_ids: [],
+  });
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get(`/meetings/${id}/`)
-      setM(data)
+      const { data } = await api.get(`/meetings/${id}/`);
+      setM(data);
       const [o, t] = await Promise.all([
         api.get(`/meetings/${id}/output/`),
-        api.get('/tasks/', { params: { meeting: id } }),
-      ])
-      setOut(o.data)
-      setTasks(t.data.results)
+        api.get("/tasks/", { params: { meeting: id } }),
+      ]);
+      setOut(o.data);
+      setTasks(t.data.results);
     } catch (e) {
-      setErr(errMsg(e))
+      setErr(errMsg(e));
     }
-  }, [id])
+  }, [id]);
 
-  useEffect(() => { load() }, [load])
-  useEffect(() => { const t = setInterval(() => setClockNow(Date.now()), 10000); return () => clearInterval(t) }, [])
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    const t = setInterval(() => setClockNow(Date.now()), 10000);
+    return () => clearInterval(t);
+  }, []);
 
-  useEffect(() => { setTr(null); setTrErr('') }, [id, m?.status])
+  useEffect(() => {
+    setTr(null);
+    setTrErr("");
+  }, [id, m?.status]);
 
   // Poll while the backend pipeline is running
   useEffect(() => {
-    if (m?.status !== 'PROCESSING' && !m?.processing_cancel_requested) return
-    const t = setInterval(load, 2000)
-    return () => clearInterval(t)
-  }, [m?.status, m?.processing_cancel_requested, load])
+    if (m?.status !== "PROCESSING" && !m?.processing_cancel_requested) return;
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [m?.status, m?.processing_cancel_requested, load]);
 
   const upload = async (file) => {
-    setUpErr('')
-    setUploadNotice('')
-    setCancelledLocally(false)
-    if (!file) return
-    const ext = '.' + file.name.split('.').pop().toLowerCase()
-    if (!ALLOWED.includes(ext)) return setUpErr(`Unsupported format. Allowed: ${ALLOWED.join(', ')}`)
-    if (file.size > MAX_MB * 1024 * 1024) return setUpErr(`File too large. Max ${MAX_MB} MB.`)
-    const fd = new FormData()
-    fd.append('audio', file)
-    const controller = new AbortController()
-    uploadController.current = controller
-    setUploadName(file.name)
-    setUploadPercent(0)
-    setUploading(true)
+    setUpErr("");
+    setUploadNotice("");
+    setCancelledLocally(false);
+    if (!file) return;
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!ALLOWED.includes(ext))
+      return setUpErr(`Unsupported format. Allowed: ${ALLOWED.join(", ")}`);
+    if (file.size > MAX_MB * 1024 * 1024)
+      return setUpErr(`File too large. Max ${MAX_MB} MB.`);
+    const fd = new FormData();
+    fd.append("audio", file);
+    const controller = new AbortController();
+    uploadController.current = controller;
+    setUploadName(file.name);
+    setUploadPercent(0);
+    setUploading(true);
     try {
       await api.post(`/meetings/${id}/upload-audio/`, fd, {
         signal: controller.signal,
         onUploadProgress: (event) => {
-          if (event.total) setUploadPercent(Math.min(100, Math.round((event.loaded / event.total) * 100)))
+          if (event.total)
+            setUploadPercent(
+              Math.min(100, Math.round((event.loaded / event.total) * 100)),
+            );
         },
-      })
-      setTr(null)
-      await load()
+      });
+      setTr(null);
+      await load();
     } catch (e) {
-      if (e.code === 'ERR_CANCELED' || e.name === 'CanceledError') {
-        setUploadNotice('Upload request canceled. If the server already received the audio, processing may still continue.')
-        await load()
-      } else setUpErr(errMsg(e))
+      if (e.code === "ERR_CANCELED" || e.name === "CanceledError") {
+        setUploadNotice(
+          "Upload request canceled. If the server already received the audio, processing may still continue.",
+        );
+        await load();
+      } else setUpErr(errMsg(e));
     } finally {
-      uploadController.current = null
-      setUploading(false)
-      if (fileRef.current) fileRef.current.value = ''
+      uploadController.current = null;
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
-  }
+  };
 
   // This starts the SAME scheduled meeting; it never creates a second meeting.
   const startScheduledMeeting = async () => {
-    if (starting || m?.status !== 'SCHEDULED') return
-    if (Date.now() < new Date(m.scheduled_at).getTime()) return setStartError('You can start this meeting when the scheduled time arrives.')
-    setStartError('')
-    setStarting(true)
+    if (starting || m?.status !== "SCHEDULED") return;
+    if (Date.now() < new Date(m.scheduled_at).getTime())
+      return setStartError(
+        "You can start this meeting when the scheduled time arrives.",
+      );
+    setStartError("");
+    setStarting(true);
     try {
-      await api.post(`/meetings/${id}/start/`)
-      await load()
+      await api.post(`/meetings/${id}/start/`);
+      await load();
     } catch (e) {
-      setStartError(errMsg(e))
+      setStartError(errMsg(e));
     } finally {
-      setStarting(false)
+      setStarting(false);
     }
-  }
+  };
 
   const cancelScheduledMeeting = async () => {
-    if (cancelling || m?.status !== 'SCHEDULED') return
-    if (!window.confirm('Cancel this meeting? Participants will receive a cancellation notice if email is configured.')) return
-    setStartError('')
-    setCancelling(true)
+    if (cancelling || m?.status !== "SCHEDULED") return;
+    if (
+      !window.confirm(
+        "Cancel this meeting? Participants will receive a cancellation notice if email is configured.",
+      )
+    )
+      return;
+    setStartError("");
+    setCancelling(true);
     try {
-      const { data } = await api.post(`/meetings/${id}/cancel/`)
-      await load()
-      if (data.notification_status !== 'sent') setStartError('Meeting cancelled. Email notification delivery could not be confirmed.')
-    } catch (e) { setStartError(errMsg(e)) }
-    finally { setCancelling(false) }
-  }
+      const { data } = await api.post(`/meetings/${id}/cancel/`);
+      await load();
+      if (data.notification_status !== "sent")
+        setStartError(
+          "Meeting cancelled. Email notification delivery could not be confirmed.",
+        );
+    } catch (e) {
+      setStartError(errMsg(e));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const openEditor = async () => {
-    setEditError('')
-    const date = new Date(m.scheduled_at)
-    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-    setEditForm({ title: m.title, description: m.description || '', scheduled_at: local, location: m.location || '', participant_ids: m.participants.map(p => p.id) })
-    setEditing(true)
+    setEditError("");
+    const date = new Date(m.scheduled_at);
+    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 16);
+    setEditForm({
+      title: m.title,
+      description: m.description || "",
+      scheduled_at: local,
+      location: m.location || "",
+      participant_ids: m.participants.map((p) => p.id),
+    });
+    setEditing(true);
     try {
-      const { data } = await api.get('/employees/')
-      setEmployees(Array.isArray(data) ? data : data.results || [])
-    } catch (e) { setEditError(errMsg(e)) }
-  }
+      const { data } = await api.get("/employees/");
+      setEmployees(Array.isArray(data) ? data : data.results || []);
+    } catch (e) {
+      setEditError(errMsg(e));
+    }
+  };
 
   const saveScheduled = async (event) => {
-    event.preventDefault()
-    setEditError('')
-    if (!editForm.title.trim() || !editForm.participant_ids.length) return setEditError('Enter a title and select at least one participant.')
-    const requestedTime = new Date(editForm.scheduled_at).getTime()
-    const changedTime = requestedTime !== Math.floor(new Date(m.scheduled_at).getTime() / 60000) * 60000
-    if (changedTime && new Date(m.scheduled_at).getTime() <= Date.now() + 3600000) return setEditError('Rescheduling closes one hour before the original meeting.')
-    if (changedTime && requestedTime < Date.now() + 3600000) return setEditError('Choose a new meeting time at least one hour from now.')
-    setSaving(true)
+    event.preventDefault();
+    setEditError("");
+    if (!editForm.title.trim() || !editForm.participant_ids.length)
+      return setEditError("Enter a title and select at least one participant.");
+    const requestedTime = new Date(editForm.scheduled_at).getTime();
+    const changedTime =
+      requestedTime !==
+      Math.floor(new Date(m.scheduled_at).getTime() / 60000) * 60000;
+    if (
+      changedTime &&
+      new Date(m.scheduled_at).getTime() <= Date.now() + 3600000
+    )
+      return setEditError(
+        "Rescheduling closes one hour before the original meeting.",
+      );
+    if (changedTime && requestedTime < Date.now() + 3600000)
+      return setEditError(
+        "Choose a new meeting time at least one hour from now.",
+      );
+    setSaving(true);
     try {
-      const changes = { title: editForm.title.trim(), description: editForm.description, location: editForm.location, participant_ids: editForm.participant_ids }
-      if (changedTime) changes.scheduled_at = new Date(editForm.scheduled_at).toISOString()
-      const { data: updated } = await api.patch(`/meetings/${id}/`, changes)
-      setEditError(updated.notification_status === 'sent' ? '' : 'Saved. Email notifications could not be confirmed; verify your email configuration.')
-      await load()
-      setEditing(false)
-    } catch (e) { setEditError(errMsg(e)) } finally { setSaving(false) }
-  }
+      const changes = {
+        title: editForm.title.trim(),
+        description: editForm.description,
+        location: editForm.location,
+        participant_ids: editForm.participant_ids,
+      };
+      if (changedTime)
+        changes.scheduled_at = new Date(editForm.scheduled_at).toISOString();
+      const { data: updated } = await api.patch(`/meetings/${id}/`, changes);
+      setEditError(
+        updated.notification_status === "sent"
+          ? ""
+          : "Saved. Email notifications could not be confirmed; verify your email configuration.",
+      );
+      await load();
+      setEditing(false);
+    } catch (e) {
+      setEditError(errMsg(e));
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  const cancelUpload = () => uploadController.current?.abort()
+  const cancelUpload = () => uploadController.current?.abort();
 
   const cancelProcessing = async () => {
-    if (stoppingProcessing || m?.processing_cancel_requested) return
-    if (!window.confirm('Stop generating the MoM for this recording? The meeting will remain available for uploading the correct audio.')) return
-    setProcessingStopError('')
-    setStoppingProcessing(true)
+    if (stoppingProcessing || m?.processing_cancel_requested) return;
+    if (
+      !window.confirm(
+        "Stop generating the MoM for this recording? The meeting will remain available for uploading the correct audio.",
+      )
+    )
+      return;
+    setProcessingStopError("");
+    setStoppingProcessing(true);
     try {
-      await api.post(`/meetings/${id}/cancel-processing/`)
-      setCancelledLocally(true)
-      setAudioTab('upload')
-      await load()
-    } catch (e) { setProcessingStopError(errMsg(e)) }
-    finally { setStoppingProcessing(false) }
-  }
+      await api.post(`/meetings/${id}/cancel-processing/`);
+      setCancelledLocally(true);
+      setAudioTab("upload");
+      await load();
+    } catch (e) {
+      setProcessingStopError(errMsg(e));
+    } finally {
+      setStoppingProcessing(false);
+    }
+  };
 
   const resubmitAudio = () => {
-    setAudioTab('upload')
-    setUpErr('')
-    setUploadNotice('')
+    setAudioTab("upload");
+    setUpErr("");
+    setUploadNotice("");
     // The file input is rendered as soon as cancellation cleanup has completed.
-    fileRef.current?.click()
-  }
+    fileRef.current?.click();
+  };
 
   const onDropAudio = (event) => {
-    event.preventDefault()
-    setDragging(false)
-    if (!uploading) upload(event.dataTransfer.files?.[0])
-  }
+    event.preventDefault();
+    setDragging(false);
+    if (!uploading) upload(event.dataTransfer.files?.[0]);
+  };
 
   const loadTranscript = async () => {
-    setTrErr('')
+    setTrErr("");
     try {
-      const { data } = await api.get(`/meetings/${id}/transcript/`)
-      setTr(data)
+      const { data } = await api.get(`/meetings/${id}/transcript/`);
+      setTr(data);
     } catch (e) {
-      setTrErr(errMsg(e))
+      setTrErr(errMsg(e));
     }
-  }
+  };
 
-  if (err) return <ErrorBox msg={err} />
-  if (!m) return <Loading />
+  if (err) return <ErrorBox msg={err} />;
+  if (!m) return <Loading />;
 
-  const names = Object.fromEntries(m.participants.map((p) => [p.id, p.name]))
-  const canUpload = isMgr && !m.processing_cancel_requested && ['DRAFT', 'IN_PROGRESS', 'FAILED', 'REJECTED', 'NORMALIZED'].includes(m.status)
-  const isPastMeeting = m.meeting_mode === 'past' || m.meeting_mode === 'historical'
-  const isScheduled = m.status === 'SCHEDULED'
-  const mayStart = isScheduled && clockNow >= new Date(m.scheduled_at).getTime()
-  const mayReschedule = isScheduled && new Date(m.scheduled_at).getTime() > clockNow + 3600000
-  const canReview = isMgr && ['PENDING_REVIEW', 'REJECTED'].includes(m.status)
+  const names = Object.fromEntries(m.participants.map((p) => [p.id, p.name]));
+  const canUpload =
+    isMgr &&
+    !m.processing_cancel_requested &&
+    ["DRAFT", "IN_PROGRESS", "FAILED", "REJECTED", "NORMALIZED"].includes(
+      m.status,
+    );
+  const isPastMeeting =
+    m.meeting_mode === "past" || m.meeting_mode === "historical";
+  const isScheduled = m.status === "SCHEDULED";
+  const mayStart =
+    isScheduled && clockNow >= new Date(m.scheduled_at).getTime();
+  const mayReschedule =
+    isScheduled && new Date(m.scheduled_at).getTime() > clockNow + 3600000;
+  const canReview = isMgr && ["PENDING_REVIEW", "REJECTED"].includes(m.status);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
-      <Link to="/meetings" className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 transition hover:text-blue-900"><ArrowLeft size={16} /> All meetings</Link>
+      <Link
+        to="/meetings"
+        className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 transition hover:text-blue-900"
+      >
+        <ArrowLeft size={16} /> All meetings
+      </Link>
       <div className="overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-br from-white via-white to-blue-50/80 p-6 shadow-sm sm:p-8">
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold tracking-wide text-blue-700">MEETING WORKSPACE</span>
-          {['SCHEDULED', 'IN_PROGRESS', 'CANCELLED'].includes(m.status)
-            ? <span className={`rounded-full px-3 py-1 text-xs font-semibold ${m.status === 'SCHEDULED' ? 'bg-violet-100 text-violet-700' : 'bg-emerald-100 text-emerald-700'}`}>{m.status === 'SCHEDULED' ? 'Scheduled' : m.status === 'CANCELLED' ? 'Cancelled' : 'In progress'}</span>
-            : m.status === 'NORMALIZED' ? <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Normalized</span> : <Badge value={m.status} />}
-          {m.is_confidential && <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-white"><LockKeyhole size={12} /> Confidential</span>}
+          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold tracking-wide text-blue-700">
+            MEETING WORKSPACE
+          </span>
+          {["SCHEDULED", "IN_PROGRESS", "CANCELLED"].includes(m.status) ? (
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${m.status === "SCHEDULED" ? "bg-violet-100 text-violet-700" : "bg-emerald-100 text-emerald-700"}`}
+            >
+              {m.status === "SCHEDULED"
+                ? "Scheduled"
+                : m.status === "CANCELLED"
+                  ? "Cancelled"
+                  : "In progress"}
+            </span>
+          ) : m.status === "NORMALIZED" ? (
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+              Normalized
+            </span>
+          ) : (
+            <Badge value={m.status} />
+          )}
+          {m.is_confidential && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-white">
+              <LockKeyhole size={12} /> Confidential
+            </span>
+          )}
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">{m.title}</h1>
-        {m.description && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{m.description}</p>}
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          {m.title}
+        </h1>
+        {m.description && (
+          <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+            {m.description}
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap gap-3 text-sm text-slate-600">
-          <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"><CalendarDays size={16} className="text-blue-600" />{m.status === 'SCHEDULED' ? 'Scheduled: ' : ''}{new Date(m.scheduled_at).toLocaleString()}</span>
-          {m.location && <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">📍 {m.location}</span>}
-          {m.started_at && <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"><Clock3 size={16} className="text-blue-600" />Started: {new Date(m.started_at).toLocaleString()}</span>}
-          <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"><Users size={16} className="text-blue-600" />{m.participants.length} participants</span>
-          {m.project_name && <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2"><FolderKanban size={16} className="text-blue-600" />{isMgr && m.project ? <Link to={`/projects/${m.project}`} className="hover:underline">{m.project_name}</Link> : m.project_name}</span>}
+          <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <CalendarDays size={16} className="text-blue-600" />
+            {m.status === "SCHEDULED" ? "Scheduled: " : ""}
+            {new Date(m.scheduled_at).toLocaleString()}
+          </span>
+          {m.location && (
+            <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              📍 {m.location}
+            </span>
+          )}
+          {m.started_at && (
+            <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <Clock3 size={16} className="text-blue-600" />
+              Started: {new Date(m.started_at).toLocaleString()}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+            <Users size={16} className="text-blue-600" />
+            {m.participants.length} participants
+          </span>
+          {m.project_name && (
+            <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <FolderKanban size={16} className="text-blue-600" />
+              {isMgr && m.project ? (
+                <Link to={`/projects/${m.project}`} className="hover:underline">
+                  {m.project_name}
+                </Link>
+              ) : (
+                m.project_name
+              )}
+            </span>
+          )}
         </div>
-        <div className="mt-4 text-xs text-slate-500">Managed by <span className="font-semibold text-slate-700">{m.manager_name}</span> · {m.participants.map((p) => p.name).join(', ') || 'No participants'}</div>
+        <div className="mt-4 text-xs text-slate-500">
+          Managed by{" "}
+          <span className="font-semibold text-slate-700">{m.manager_name}</span>{" "}
+          · {m.participants.map((p) => p.name).join(", ") || "No participants"}
+        </div>
       </div>
 
-      {m.status === 'NORMALIZED' && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{m.processing_error || 'Transcript is ready. Open View transcript below.'}</div>}
-      {m.status === 'FAILED' && <ErrorBox msg={m.processing_error || 'Processing failed.'} />}
+      {m.status === "NORMALIZED" && (
+        <div
+          role="status"
+          className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+        >
+          {m.processing_error ||
+            "Transcript is ready. Open View transcript below."}
+        </div>
+      )}
+      {m.status === "FAILED" && (
+        <ErrorBox msg={m.processing_error || "Processing failed."} />
+      )}
 
-      {m.status === 'SCHEDULED' && (
+      {m.status === "SCHEDULED" && (
         <section className="flex flex-col gap-5 rounded-2xl border border-blue-200 bg-blue-50/60 p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-white p-3 text-blue-700"><CalendarClock size={22} /></div>
+            <div className="rounded-xl bg-white p-3 text-blue-700">
+              <CalendarClock size={22} />
+            </div>
             <div>
-              <h2 className="font-semibold text-slate-900">Your meeting is scheduled</h2>
-              <p className="mt-1 text-sm text-slate-600">{new Date(m.scheduled_at).toLocaleString()}{m.location ? ` · ${m.location}` : ''}</p>
-              <p className="mt-2 text-sm text-slate-500">Open this same meeting when everyone is ready. Recording can start at the scheduled time or later. Early starts are blocked.</p>
+              <h2 className="font-semibold text-slate-900">
+                Your meeting is scheduled
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {new Date(m.scheduled_at).toLocaleString()}
+                {m.location ? ` · ${m.location}` : ""}
+              </p>
+              <p className="mt-2 text-sm text-slate-500">
+                Open this same meeting when everyone is ready. Recording can
+                start at the scheduled time or later. Early starts are blocked.
+              </p>
             </div>
           </div>
           {isMgr ? (
-            <button type="button" disabled={starting || !mayStart} onClick={startScheduledMeeting} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-60">
-              <PlayCircle size={19} /> {starting ? 'Starting…' : mayStart ? 'Start meeting' : 'Available at scheduled time'}
+            <button
+              type="button"
+              disabled={starting || !mayStart}
+              onClick={startScheduledMeeting}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-60"
+            >
+              <PlayCircle size={19} />{" "}
+              {starting
+                ? "Starting…"
+                : mayStart
+                  ? "Start meeting"
+                  : "Available at scheduled time"}
             </button>
-          ) : <span className="text-sm font-medium text-blue-700">Waiting for the manager to start</span>}
+          ) : (
+            <span className="text-sm font-medium text-blue-700">
+              Waiting for the manager to start
+            </span>
+          )}
           {startError && <ErrorBox msg={startError} />}
         </section>
       )}
@@ -557,56 +908,227 @@ export default function MeetingDetail() {
       {isScheduled && isMgr && (
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="font-semibold text-slate-900">Scheduled meeting details</h2><p className="mt-1 text-sm text-slate-500">Update the time, location, agenda, or invited participants before starting.</p></div>
-            <button type="button" onClick={() => editing ? setEditing(false) : openEditor()} className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">{editing ? 'Close editor' : 'Edit meeting'}</button>
+            <div>
+              <h2 className="font-semibold text-slate-900">
+                Scheduled meeting details
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Update the time, location, agenda, or invited participants
+                before starting.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => (editing ? setEditing(false) : openEditor())}
+              className="rounded-xl border border-blue-200 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+            >
+              {editing ? "Close editor" : "Edit meeting"}
+            </button>
           </div>
-          {!mayReschedule && <p className="mt-3 text-xs text-amber-700">Rescheduling is closed within one hour of the meeting. You can still edit other details or cancel before it starts.</p>}
-          {editing && <form onSubmit={saveScheduled} className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1 text-sm font-medium text-slate-700">Title<input required maxLength={200} className="w-full rounded-lg border border-slate-300 p-2.5" value={editForm.title} onChange={e => setEditForm(f => ({...f, title: e.target.value}))} /></label>
-            <label className="space-y-1 text-sm font-medium text-slate-700">Date and time<input required disabled={!mayReschedule} type="datetime-local" className="w-full rounded-lg border border-slate-300 p-2.5" value={editForm.scheduled_at} onChange={e => setEditForm(f => ({...f, scheduled_at: e.target.value}))} /></label>
-            <label className="space-y-1 text-sm font-medium text-slate-700">Location<input className="w-full rounded-lg border border-slate-300 p-2.5" value={editForm.location} onChange={e => setEditForm(f => ({...f, location: e.target.value}))} /></label>
-            <label className="space-y-1 text-sm font-medium text-slate-700 sm:col-span-2">Agenda<textarea rows={3} className="w-full rounded-lg border border-slate-300 p-2.5" value={editForm.description} onChange={e => setEditForm(f => ({...f, description: e.target.value}))} /></label>
-            <fieldset className="space-y-2 sm:col-span-2"><legend className="mb-2 text-sm font-semibold text-slate-700">Participants</legend><div className="grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">{employees.map(p => <label key={p.id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2 text-sm"><input type="checkbox" checked={editForm.participant_ids.includes(p.id)} onChange={() => setEditForm(f => ({...f, participant_ids: f.participant_ids.includes(p.id) ? f.participant_ids.filter(id => id !== p.id) : [...f.participant_ids, p.id]}))} />{p.name}</label>)}</div></fieldset>
-            {editError && <div className="sm:col-span-2"><ErrorBox msg={editError}/></div>}
-            <button disabled={saving} className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2">{saving ? 'Saving…' : 'Save changes'}</button>
-          </form>}
+          {!mayReschedule && (
+            <p className="mt-3 text-xs text-amber-700">
+              Rescheduling is closed within one hour of the meeting. You can
+              still edit other details or cancel before it starts.
+            </p>
+          )}
+          {editing && (
+            <form
+              onSubmit={saveScheduled}
+              className="mt-5 grid gap-4 sm:grid-cols-2"
+            >
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                Title
+                <input
+                  required
+                  maxLength={200}
+                  className="w-full rounded-lg border border-slate-300 p-2.5"
+                  value={editForm.title}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, title: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                Date and time
+                <input
+                  required
+                  disabled={!mayReschedule}
+                  type="datetime-local"
+                  className="w-full rounded-lg border border-slate-300 p-2.5"
+                  value={editForm.scheduled_at}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, scheduled_at: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700">
+                Location
+                <input
+                  className="w-full rounded-lg border border-slate-300 p-2.5"
+                  value={editForm.location}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, location: e.target.value }))
+                  }
+                />
+              </label>
+              <label className="space-y-1 text-sm font-medium text-slate-700 sm:col-span-2">
+                Agenda
+                <textarea
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-300 p-2.5"
+                  value={editForm.description}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, description: e.target.value }))
+                  }
+                />
+              </label>
+              <fieldset className="space-y-2 sm:col-span-2">
+                <legend className="mb-2 text-sm font-semibold text-slate-700">
+                  Participants
+                </legend>
+                <div className="grid max-h-52 gap-2 overflow-y-auto sm:grid-cols-2">
+                  {employees.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex items-center gap-2 rounded-lg border border-slate-200 p-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={editForm.participant_ids.includes(p.id)}
+                        onChange={() =>
+                          setEditForm((f) => ({
+                            ...f,
+                            participant_ids: f.participant_ids.includes(p.id)
+                              ? f.participant_ids.filter((id) => id !== p.id)
+                              : [...f.participant_ids, p.id],
+                          }))
+                        }
+                      />
+                      {p.name}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {editError && (
+                <div className="sm:col-span-2">
+                  <ErrorBox msg={editError} />
+                </div>
+              )}
+              <button
+                disabled={saving}
+                className="rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50 sm:col-span-2"
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </button>
+            </form>
+          )}
           <div className="mt-5 border-t border-slate-100 pt-4">
-            <button type="button" disabled={cancelling} onClick={cancelScheduledMeeting} className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50">{cancelling ? 'Cancelling…' : 'Cancel meeting'}</button>
-            <p className="mt-2 text-xs text-slate-500">Cancellation is permitted until the manager starts the meeting, including during the final hour.</p>
+            <button
+              type="button"
+              disabled={cancelling}
+              onClick={cancelScheduledMeeting}
+              className="rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            >
+              {cancelling ? "Cancelling…" : "Cancel meeting"}
+            </button>
+            <p className="mt-2 text-xs text-slate-500">
+              Cancellation is permitted until the manager starts the meeting,
+              including during the final hour.
+            </p>
           </div>
         </section>
       )}
 
-      {m.status === 'CANCELLED' && <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900">This meeting was cancelled. Recording and editing are unavailable.</section>}
+      {m.status === "CANCELLED" && (
+        <section className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-900">
+          This meeting was cancelled. Recording and editing are unavailable.
+        </section>
+      )}
 
-      {m.status === 'IN_PROGRESS' && <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"><Mic2 size={20} /> Meeting started. The manager can record or upload audio below.</div>}
+      {m.status === "IN_PROGRESS" && (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <Mic2 size={20} /> Meeting started. The manager can record or upload
+          audio below.
+        </div>
+      )}
 
-      {(m.processing_cancel_requested || (cancelledLocally && m.status === 'DRAFT')) && (
-        <section role="status" className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+      {(m.processing_cancel_requested ||
+        (cancelledLocally && m.status === "DRAFT")) && (
+        <section
+          role="status"
+          className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
+        >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="font-semibold">Processing cancelled</p>
-              <p className="mt-1">{m.processing_cancel_requested
-                ? 'The previous recording is being released safely. You can resubmit when cleanup completes.'
-                : 'You can now select the correct recording and submit it again.'}</p>
+              <p className="mt-1">
+                {m.processing_cancel_requested
+                  ? "The previous recording is being released safely. You can resubmit when cleanup completes."
+                  : "You can now select the correct recording and submit it again."}
+              </p>
             </div>
-            {isMgr && <button
-              type="button"
-              disabled={m.processing_cancel_requested || uploading}
-              onClick={resubmitAudio}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
-            ><CloudUpload size={17} />{m.processing_cancel_requested ? 'Preparing resubmission…' : 'Resubmit audio'}</button>}
+            {isMgr && (
+              <button
+                type="button"
+                disabled={m.processing_cancel_requested || uploading}
+                onClick={resubmitAudio}
+                className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <CloudUpload size={17} />
+                {m.processing_cancel_requested
+                  ? "Preparing resubmission…"
+                  : "Resubmit audio"}
+              </button>
+            )}
           </div>
-          {m.processing_cancel_requested && <p className="mt-3 text-xs text-amber-700">This page checks automatically for completion. An AI call that was already running may take time to release the previous recording.</p>}
+          {m.processing_cancel_requested && (
+            <p className="mt-3 text-xs text-amber-700">
+              This page checks automatically for completion. An AI call that was
+              already running may take time to release the previous recording.
+            </p>
+          )}
         </section>
       )}
-      {m.status === 'PROCESSING' && (
+      {m.status === "PROCESSING" && (
         <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5 shadow-sm sm:p-6">
-          <div className="mb-3 flex items-start gap-3"><span className="rounded-xl bg-blue-100 p-2 text-blue-700"><Sparkles size={20} className="animate-pulse" /></span><div><h2 className="font-semibold text-slate-900">Preparing your transcript</h2><p className="mt-1 text-sm text-slate-600">Whisper transcription and normalization run locally on the backend. Processing stops after the normalized transcript is saved.</p></div></div>
+          <div className="mb-3 flex items-start gap-3">
+            <span className="rounded-xl bg-blue-100 p-2 text-blue-700">
+              <Sparkles size={20} className="animate-pulse" />
+            </span>
+            <div>
+              <h2 className="font-semibold text-slate-900">
+                Preparing your transcript
+              </h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Whisper transcription and normalization run locally on the
+                backend. Processing stops after the normalized transcript is
+                saved.
+              </p>
+            </div>
+          </div>
           <ProcessingProgress progress={m.progress} />
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-white/80 px-4 py-3">
-            <p className="max-w-xl text-xs text-slate-600"><Clock3 size={14} className="mr-1 inline" />{m.processing_cancel_requested ? 'Cancellation requested. Waiting for the current AI call to finish before stopping safely.' : 'Uploaded the wrong audio? Stop this processing run before generating the MoM.'}</p>
-            <button type="button" disabled={!isMgr || stoppingProcessing || m.processing_cancel_requested} onClick={cancelProcessing} className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"><X size={15} />{m.processing_cancel_requested ? 'Stopping…' : stoppingProcessing ? 'Requesting…' : 'Cancel processing'}</button>
+            <p className="max-w-xl text-xs text-slate-600">
+              <Clock3 size={14} className="mr-1 inline" />
+              {m.processing_cancel_requested
+                ? "Cancellation requested. Waiting for the current AI call to finish before stopping safely."
+                : "Uploaded the wrong audio? Stop this processing run before generating the MoM."}
+            </p>
+            <button
+              type="button"
+              disabled={
+                !isMgr || stoppingProcessing || m.processing_cancel_requested
+              }
+              onClick={cancelProcessing}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <X size={15} />
+              {m.processing_cancel_requested
+                ? "Stopping…"
+                : stoppingProcessing
+                  ? "Requesting…"
+                  : "Cancel processing"}
+            </button>
           </div>
           {processingStopError && <ErrorBox msg={processingStopError} />}
         </section>
@@ -615,9 +1137,14 @@ export default function MeetingDetail() {
       {canReview && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
           <span className="text-sm text-blue-900">
-            {m.status === 'REJECTED' ? 'This output was rejected. You can revise and resubmit it.' : 'Tasks found in the transcript are waiting for your review. No tasks exist until you approve.'}
+            {m.status === "REJECTED"
+              ? "This output was rejected. You can revise and resubmit it."
+              : "Tasks found in the transcript are waiting for your review. No tasks exist until you approve."}
           </span>
-          <Link to={`/meetings/${m.id}/review`} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800">
+          <Link
+            to={`/meetings/${m.id}/review`}
+            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
+          >
             Review and approve
           </Link>
         </div>
@@ -627,83 +1154,224 @@ export default function MeetingDetail() {
         <Card title="Audio studio" icon={Mic2}>
           {canUpload ? (
             <div className="space-y-5">
-              <p className="text-sm text-slate-500">{isPastMeeting ? 'Upload the recording of your completed meeting to create a normalized transcript.' : 'Choose an existing recording or capture your meeting live. Your audio is submitted for transcription after upload.'}</p>
-              {!isPastMeeting && <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
-                <button type="button" onClick={() => setAudioTab('upload')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-semibold transition ${audioTab === 'upload' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}><CloudUpload size={17} /> Upload audio</button>
-                <button type="button" onClick={() => setAudioTab('record')} className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-semibold transition ${audioTab === 'record' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}><Mic2 size={17} /> Record live</button>
-              </div>}
-              {isPastMeeting || audioTab === 'upload' ? (
-                <div onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragging(true) }} onDragLeave={(e) => { e.preventDefault(); setDragging(false) }} onDrop={onDropAudio} className={`rounded-2xl border-2 border-dashed px-5 py-9 text-center transition ${dragging ? 'border-blue-500 bg-blue-50' : 'border-blue-200 bg-slate-50/70 hover:bg-blue-50/40'}`}>
-                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700"><FileAudio2 size={27} /></div>
-                  <h3 className="font-semibold text-slate-900">Drop your meeting audio here</h3>
-                  <p className="mt-1 text-sm text-slate-500">or browse files on your device</p>
-                  <button type="button" disabled={uploading} onClick={() => fileRef.current?.click()} className="mt-4 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-50">Choose audio file</button>
-                  <input ref={fileRef} type="file" accept={ALLOWED.join(',')} disabled={uploading} onChange={(e) => upload(e.target.files?.[0])} className="hidden" />
-                  <p className="mt-4 text-xs text-slate-400">MP3, WAV, M4A, OGG or WEBM · Maximum {MAX_MB} MB</p>
+              <p className="text-sm text-slate-500">
+                {isPastMeeting
+                  ? "Upload the recording of your completed meeting to create a normalized transcript."
+                  : "Choose an existing recording or capture your meeting live. Your audio is submitted for transcription after upload."}
+              </p>
+              {!isPastMeeting && (
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setAudioTab("upload")}
+                    className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-semibold transition ${audioTab === "upload" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    <CloudUpload size={17} /> Upload audio
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAudioTab("record")}
+                    className={`flex items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-semibold transition ${audioTab === "record" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    <Mic2 size={17} /> Record live
+                  </button>
+                </div>
+              )}
+              {isPastMeeting || audioTab === "upload" ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (!uploading) setDragging(true);
+                  }}
+                  onDragLeave={(e) => {
+                    e.preventDefault();
+                    setDragging(false);
+                  }}
+                  onDrop={onDropAudio}
+                  className={`rounded-2xl border-2 border-dashed px-5 py-9 text-center transition ${dragging ? "border-blue-500 bg-blue-50" : "border-blue-200 bg-slate-50/70 hover:bg-blue-50/40"}`}
+                >
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-blue-700">
+                    <FileAudio2 size={27} />
+                  </div>
+                  <h3 className="font-semibold text-slate-900">
+                    Drop your meeting audio here
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    or browse files on your device
+                  </p>
+                  <button
+                    type="button"
+                    disabled={uploading}
+                    onClick={() => fileRef.current?.click()}
+                    className="mt-4 rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-50"
+                  >
+                    Choose audio file
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept={ALLOWED.join(",")}
+                    disabled={uploading}
+                    onChange={(e) => upload(e.target.files?.[0])}
+                    className="hidden"
+                  />
+                  <p className="mt-4 text-xs text-slate-400">
+                    MP3, WAV, M4A, OGG or WEBM · Maximum {MAX_MB} MB
+                  </p>
                 </div>
               ) : (
                 <div className="rounded-2xl border border-blue-100 bg-gradient-to-b from-blue-50/70 to-white p-6 text-center">
-                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700"><Mic2 size={26} /></div>
-                  <h3 className="font-semibold text-slate-900">Capture your conversation</h3>
-                  <p className="mb-5 mt-1 text-sm text-slate-500">Use the controls below to record and finish your audio.</p>
-                  <div className="flex justify-center"><Recorder disabled={uploading} onRecorded={upload} /></div>
-                  <p className="mt-4 text-xs text-slate-400">Microphone access may require browser permission.</p>
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                    <Mic2 size={26} />
+                  </div>
+                  <h3 className="font-semibold text-slate-900">
+                    Capture your conversation
+                  </h3>
+                  <p className="mb-5 mt-1 text-sm text-slate-500">
+                    Use the controls below to record and finish your audio.
+                  </p>
+                  <div className="flex justify-center">
+                    <Recorder disabled={uploading} onRecorded={upload} />
+                  </div>
+                  <p className="mt-4 text-xs text-slate-400">
+                    Microphone access may require browser permission.
+                  </p>
                 </div>
               )}
               {uploading && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3 text-sm"><span className="truncate font-medium text-slate-800">{uploadName}</span><span className="font-semibold text-blue-700">{uploadPercent}%</span></div>
-                  <div className="h-2 overflow-hidden rounded-full bg-blue-100"><div className="h-full rounded-full bg-blue-600 transition-all duration-300" style={{ width: `${uploadPercent}%` }} /></div>
-                  <div className="mt-3 flex items-center justify-between gap-3"><p className="text-xs text-slate-500">Uploading to the server…</p><button type="button" onClick={cancelUpload} className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"><X size={14} /> Cancel upload</button></div>
+                  <div className="mb-2 flex items-center justify-between gap-3 text-sm">
+                    <span className="truncate font-medium text-slate-800">
+                      {uploadName}
+                    </span>
+                    <span className="font-semibold text-blue-700">
+                      {uploadPercent}%
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-blue-100">
+                    <div
+                      className="h-full rounded-full bg-blue-600 transition-all duration-300"
+                      style={{ width: `${uploadPercent}%` }}
+                    />
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      Uploading to the server…
+                    </p>
+                    <button
+                      type="button"
+                      onClick={cancelUpload}
+                      className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                    >
+                      <X size={14} /> Cancel upload
+                    </button>
+                  </div>
                 </div>
               )}
-              {uploadNotice && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{uploadNotice}</p>}
+              {uploadNotice && (
+                <p
+                  role="status"
+                  className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800"
+                >
+                  {uploadNotice}
+                </p>
+              )}
               <ErrorBox msg={upErr} />
             </div>
           ) : (
-            <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"><span className="rounded-lg bg-white p-2 text-blue-600"><CheckCircle2 size={20} /></span><div><p className="font-medium text-slate-800">{m.processing_cancel_requested ? 'Preparing for resubmission' : m.has_audio ? 'Audio submitted' : 'Audio upload unavailable'}</p><p className="mt-1 text-sm text-slate-500">{m.status === 'PROCESSING' ? 'Your recording is being processed. New uploads are disabled until the meeting changes status.' : m.processing_cancel_requested ? 'Cancelling the previous run. Uploading is available after cleanup finishes.' : 'Uploading is available after the meeting starts, or for draft, failed, rejected, and normalized meetings.'}</p></div></div>
+            <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <span className="rounded-lg bg-white p-2 text-blue-600">
+                <CheckCircle2 size={20} />
+              </span>
+              <div>
+                <p className="font-medium text-slate-800">
+                  {m.processing_cancel_requested
+                    ? "Preparing for resubmission"
+                    : m.has_audio
+                      ? "Audio submitted"
+                      : "Audio upload unavailable"}
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  {m.status === "PROCESSING"
+                    ? "Your recording is being processed. New uploads are disabled until the meeting changes status."
+                    : m.processing_cancel_requested
+                      ? "Cancelling the previous run. Uploading is available after cleanup finishes."
+                      : "Uploading is available after the meeting starts, or for draft, failed, rejected, and normalized meetings."}
+                </p>
+              </div>
+            </div>
           )}
         </Card>
       )}
 
-      {!isScheduled && m.status !== 'CANCELLED' && (
-      <>
-      <Card title="Transcript" icon={FileText}>
-        {!tr && <button onClick={loadTranscript} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100"><FileText size={16} /> View transcript</button>}
-        <ErrorBox msg={trErr} />
-        {tr && !tr.available && <p className="text-sm text-gray-500">No transcript yet.</p>}
-        {tr?.available && (
-          <div className="space-y-3">
-            {tr.source === 'dev_adapter' && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-                DEV ADAPTER: this is fixed sample text. The uploaded audio was NOT transcribed by Whisper.
+      {!isScheduled && m.status !== "CANCELLED" && (
+        <>
+          <Card title="Transcript" icon={FileText}>
+            {!tr && (
+              <button
+                onClick={loadTranscript}
+                className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100"
+              >
+                <FileText size={16} /> View transcript
+              </button>
+            )}
+            <ErrorBox msg={trErr} />
+            {tr && !tr.available && (
+              <p className="text-sm text-gray-500">No transcript yet.</p>
+            )}
+            {tr?.available && (
+              <div className="space-y-3">
+                {tr.source === "dev_adapter" && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+                    DEV ADAPTER: this is fixed sample text. The uploaded audio
+                    was NOT transcribed by Whisper.
+                  </div>
+                )}
+                {tr.source === "whisper" && (
+                  <p className="text-xs text-gray-500">
+                    Transcribed by Whisper.
+                  </p>
+                )}
+                {tr.original !== undefined && (
+                  <div>
+                    <h3 className="text-sm font-medium">
+                      Original (restricted, manager only)
+                    </h3>
+                    <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm">
+                      {tr.original}
+                    </pre>
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-sm font-medium">Normalized transcript</h3>
+                  <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm">
+                    {tr.normalized}
+                  </pre>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Names and personal details are preserved. Only whitespace
+                    and Unicode formatting are normalized; sentences are
+                    identified locally.
+                  </p>
+                </div>
               </div>
             )}
-            {tr.source === 'whisper' && <p className="text-xs text-gray-500">Transcribed by Whisper.</p>}
-            {tr.original !== undefined && (
-              <div>
-                <h3 className="text-sm font-medium">Original (restricted, manager only)</h3>
-                <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm">{tr.original}</pre>
-              </div>
+          </Card>
+
+          <Card title="Tasks found in the meeting" icon={Sparkles}>
+            {out ? (
+              <Output out={out} names={names} isMgr={isMgr} />
+            ) : (
+              <Empty
+                text={
+                  isMgr
+                    ? "No tasks were found yet. Upload a recording to extract tasks."
+                    : "Approved outputs will appear here."
+                }
+              />
             )}
-            <div>
-              <h3 className="text-sm font-medium">Normalized transcript</h3>
-              <pre className="whitespace-pre-wrap rounded-lg bg-gray-50 p-3 text-sm">{tr.normalized}</pre>
-              <p className="mt-1 text-xs text-gray-500">Names and personal details are preserved. Only whitespace and Unicode formatting are normalized; sentences are identified locally.</p>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <Card title="Tasks found in the meeting" icon={Sparkles}>
-        {out ? <Output out={out} names={names} isMgr={isMgr} /> : (
-          <Empty text={isMgr ? 'No tasks were found yet. Upload a recording to extract tasks.' : 'Approved outputs will appear here.'} />
-        )}
-      </Card>
-
-      
-      </>
+          </Card>
+        </>
       )}
     </div>
-  )
+  );
 }
