@@ -1,4 +1,6 @@
+import mimetypes
 import os
+import re
 import logging
 from django.core.mail import send_mail
 from django.db import transaction
@@ -10,6 +12,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.http import FileResponse, HttpResponse
 from apps.accounts.permissions import CanCreateMeetings, HasPerm, IsManager
 from apps.core.services import audit
 from .models import AIOutput, Meeting
@@ -148,6 +151,8 @@ class MeetingViewSet(viewsets.ModelViewSet):
             raise ValidationError("Approved meetings cannot be reprocessed.")
         if not m.links.exists():
             raise ValidationError("Add at least one participant first.")
+        if m.audio:  # a new upload replaces the old recording instead of leaving it behind
+            m.audio.delete(save=False)
         m.audio.save(f"meeting_{m.id}{ext}", f)
         m.status = "PROCESSING"
         m.processing_cancel_requested = False
@@ -156,6 +161,42 @@ class MeetingViewSet(viewsets.ModelViewSet):
         audit(request.user, "AUDIO_UPLOADED", m, size=f.size)
         pipeline.start(m.id)
         return Response({"status": "PROCESSING"}, status=202)
+
+    @action(detail=True, methods=["get"], url_path="audio")
+    def audio(self, request, pk=None):
+        """Play or download the saved recording. The audio is kept after transcription.
+        The manager and invited participants can listen; a confidential meeting is for the manager only."""
+        m = self.get_object()
+        u = request.user
+        if m.manager_id != u.id and m.is_confidential:
+            raise PermissionDenied("The recording of a confidential meeting is restricted to the manager.")
+        if not m.audio or not os.path.exists(m.audio.path):
+            raise ValidationError("No recording is stored for this meeting.")
+        path = m.audio.path
+        size = os.path.getsize(path)
+        ctype = mimetypes.guess_type(path)[0] or "application/octet-stream"
+        name = f"{re.sub(r'[^A-Za-z0-9._-]+', '_', m.title)[:60] or 'meeting'}{os.path.splitext(path)[1]}"
+        rng = re.match(r"bytes=(\d*)-(\d*)$", request.headers.get("Range", ""))
+        if rng and (rng.group(1) or rng.group(2)):  # lets the player seek
+            start = int(rng.group(1)) if rng.group(1) else max(0, size - int(rng.group(2)))
+            end = int(rng.group(2)) if rng.group(1) and rng.group(2) else size - 1
+            end = min(end, size - 1)
+            if start > end:
+                return HttpResponse(status=416, headers={"Content-Range": f"bytes */{size}"})
+            with open(path, "rb") as fh:
+                fh.seek(start)
+                data = fh.read(end - start + 1)
+            resp = HttpResponse(data, status=206, content_type=ctype)
+            resp["Content-Range"] = f"bytes {start}-{end}/{size}"
+        else:
+            resp = FileResponse(open(path, "rb"), content_type=ctype)
+        resp["Accept-Ranges"] = "bytes"
+        resp["Content-Length"] = str(len(resp.content) if resp.status_code == 206 else size)
+        disp = "attachment" if request.query_params.get("download") else "inline"
+        resp["Content-Disposition"] = f'{disp}; filename="{name}"'
+        if request.query_params.get("download"):
+            audit(u, "AUDIO_DOWNLOADED", m)
+        return resp
 
     @action(detail=True, methods=["post"], url_path="cancel-processing")
     def cancel_processing(self, request, pk=None):
