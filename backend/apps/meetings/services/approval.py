@@ -15,6 +15,7 @@ def approve(output_id, reviewer):
     if out.status != "PENDING_REVIEW":
         raise ValidationError("Only outputs pending review can be approved.")
     valid_ids = set(out.meeting.links.values_list("user_id", flat=True))
+    valid_ids.add(out.meeting.manager_id)   # the meeting owner can own tasks said as "I will…" even if not listed as a participant
     now, created = timezone.now(), []
     for i, it in enumerate(out.action_items):
         if it.get("discard"):
