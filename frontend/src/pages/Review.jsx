@@ -51,7 +51,9 @@ setOriginalTranscript(tt.data.original || '')
   }, [id])
 
   useEffect(() => { load() }, [load])
-  const wl = useWorkload((m?.participants || []).map((p) => p.id))
+  // Everyone who can own a task: the participants, plus the meeting owner (a task said as "I will…" goes to the owner).
+  const assignees = m ? [...m.participants, ...(m.owner && !m.participants.some((p) => p.id === m.owner.id) ? [m.owner] : [])] : []
+  const wl = useWorkload(assignees.map((p) => p.id))
 
   if (!m) return err ? <ErrorBox msg={err} /> : <Loading />
   if (!out || !d) {
@@ -536,7 +538,7 @@ setOriginalTranscript(tt.data.original || '')
                     >
                       <option value="">Unresolved</option>
 
-                      {m.participants.map((p) => (
+                      {assignees.map((p) => (
                         <option key={p.id} value={p.id}>
                           {optionLabel(wl, p)}
                         </option>
@@ -546,7 +548,7 @@ setOriginalTranscript(tt.data.original || '')
                       <WorkloadHint
                         data={wl}
                         userId={a.assignee_id}
-                        people={m.participants}
+                        people={assignees}
                         extra={d.items.filter((x) => !x.discard && x.assignee_id === a.assignee_id).length}
                       />
                     )}
