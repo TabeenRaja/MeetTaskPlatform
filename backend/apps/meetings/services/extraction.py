@@ -17,6 +17,7 @@ How it works (everything is deterministic and explainable):
   6. A confidence level and a plain-language note explain every uncertain choice, so the manager can review.
 """
 import logging
+import os
 import re
 import threading
 from collections import deque
@@ -72,6 +73,22 @@ LIGHT_WITH_PARTICLE = {"work": {"on", "with"}, "look": {"into", "at", "over", "t
                        "take": {"care", "over"}, "keep": {"up"}, "get": {"back", "ready", "started", "going"},
                        "come": {"up"}, "follow": {"up"}, "talk": {"to", "with"}, "speak": {"to", "with"}}
 VAGUE_OBJECTS = {"it", "this", "that", "them", "these", "those", "something", "things", "stuff", "one"}
+# Things people say in a meeting that are not work: thanking, agenda talk ("Today we will go through the roadmap").
+INVARIANT_PAST = {"set", "put", "cut", "let", "hit", "read", "shut", "split", "spread"}   # past form looks like the base form
+CORRECTION_RX = re.compile(r"[,;]?\s*(?:no[, ]+wait|wait[, ]+no|no no|scratch that|i mean|sorry|actually no|correction)\b[,.]?\s+",
+                           re.I)
+DATE_LEADS = {"by", "on", "before", "until", "till", "in", "within", "from", "next", "this", "at", "every", "each", "coming"}
+SPEECH_ACT_VERBS = {"thank", "appreciate", "congratulate", "welcome", "apologize", "apologise", "greet"}
+AGENDA_VERBS = {"discuss", "cover", "recap", "summarize", "summarise", "introduce"}
+AGENDA_PHRASES = {"go": {"through", "over"}, "walk": {"through"}, "run": {"through"}, "touch": {"on"},
+                  "talk": {"about", "through"}, "kick": {"off"}, "wrap": {"up"}, "start": {"with"}, "begin": {"with"}}
+AGENDA_TIME_RX = re.compile(r"\b(?:today|now|first|next|later|shortly|quickly|briefly|this (?:meeting|call|session))\b", re.I)
+HEDGE_STRONG_RX = re.compile(r"\b(?:maybe|perhaps|probably|possibly|might|not sure|we could|could be|would be nice|"
+                             r"would be good|at some point|some day|someday)\b", re.I)
+TAKE_OVER_RX = re.compile(r"\b(?:can |could |should |will |'ll |please )?(?:take|handle|own|pick up|grab|cover)\s+"
+                          r"(?:that|this|it|those|these)(?:\s+one)?\b", re.I)
+TODO_FOR_RX = re.compile(r"(?i:\b(?:action items?|action points?|to-?do|tasks?|next steps?|follow[- ]?ups?))\s+for\s+"
+                         r"(?!(?i:the|this|next|our|all|each|every|a|an)\b)([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*)?)\s*[,:\-–]\s*")
 ROLE_WORDS = {"manager", "lead", "designer", "developer", "tester", "engineer", "admin", "administrator",
               "accountant", "analyst", "owner", "director", "supervisor", "coordinator", "officer"}
 
@@ -118,8 +135,9 @@ DEADLINE_RX = re.compile(
     r"(?P<lead>\b(?:by|before|until|till|on|due|for|this|next|coming|within|in|no later than|latest by|"
     r"first thing|at the latest)\b\s+)?"
     r"(?P<core>(?<![A-Za-z0-9])(?:"
-    r"(?:the\s+)?end of (?:the\s+)?(?:(?:this|next|the)\s+)?(?:day|week|month|year|today|business day)"
-    r"|\bcob\b|\beod\b|\beow\b|\bclose of business\b|\bend of day\b"
+    r"(?:end of (?:the\s+)?day|eod|cob|close of business)\s+(?:on\s+)?(?:(?:this|next|coming)\s+)?" + WEEKDAY_RX +
+    r"|(?:the\s+)?end of (?:the\s+)?(?:(?:this|next|the)\s+)?(?:day|week|month|year|today|business day)"
+    r"|\bcob\b|\beod\b|\beow\b|\bclose of business\b|\bend of day\b|\bnoon\b|\bmidday\b"
     r"|(?:the\s+)?day after tomorrow|tomorrow(?:\s+(?:morning|afternoon|evening|night))?|today|tonight"
     r"|(?:(?:this|next|coming)\s+)?" + WEEKDAY_RX + r"(?:\s+(?:morning|afternoon|evening|night))?"
     r"|(?:(?:this|next|coming)\s+(?:week|month|quarter|year))|(?:the\s+)?(?:following|coming)\s+(?:week|month)"
@@ -136,6 +154,10 @@ DEADLINE_RX = re.compile(
 # ----------------------------------------------------------------------------------------------
 # Dates: our own resolver for the phrases people actually say in meetings, dateparser for calendar dates
 # ----------------------------------------------------------------------------------------------
+DATE_WORD_RX = re.compile(r"^(?:" + WEEKDAY_RX + r"|tomorrow|today|tonight|morning|afternoon|evening|week|month|year|noon|"
+                          r"midnight|eod|cob|eow|\d{1,2}(?:st|nd|rd|th)?|" + MONTH_RX + r")$", re.I)
+
+
 def _end_of_week(base):
     return base + timedelta(days=(4 - base.weekday()) % 7)          # Friday
 
@@ -170,10 +192,13 @@ def resolve_date(lead, core, base):
             return base, ""
         days = n * (1 if unit.startswith("day") else 7 if unit.startswith("week") else 30)
         return base + timedelta(days=days), "" if unit.startswith("day") else f"'{n} {unit}' counted from the meeting date."
+    m = re.match(r"(?:end of (?:the )?day|eod|cob|close of business) (?:on )?((?:(?:this|next|coming) )?" + WEEKDAY_RX + r")$", low)
+    if m:
+        low = m.group(1)                                          # "end of day Friday" means Friday
     if low in ("eod", "end of day", "end of the day", "end of today", "cob", "close of business",
                "end of business day"):
         return base, ""
-    if low in ("today", "tonight"):
+    if low in ("today", "tonight", "noon", "midday"):
         return base, ""
     if low.startswith("tomorrow"):
         return base + timedelta(days=1), ""
@@ -240,12 +265,51 @@ def resolve_date(lead, core, base):
     return _calendar(low, base)
 
 
+_MONTHS = {m: i for i, names in enumerate(
+    ["jan january", "feb february", "mar march", "apr april", "may", "jun june", "jul july", "aug august",
+     "sep sept september", "oct october", "nov november", "dec december"], 1) for m in names.split()}
+_DAY = r"(\d{1,2})(?:st|nd|rd|th)?"
+_MON = "(" + "|".join(sorted(_MONTHS, key=len, reverse=True)) + r")\.?"
+
+
+def _calendar_basic(text, base):
+    """Fallback without dateparser: '15 November', '15th of Nov', 'November 15', '15/11', '2026-11-15'."""
+    t = text.lower().strip()
+    day = mon = year = None
+    m = re.search(r"\b(\d{4})-(\d{1,2})-(\d{1,2})\b", t)
+    if m:
+        year, mon, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    if day is None:
+        m = re.search(r"\b" + _DAY + r"\s+(?:of\s+)?" + _MON + r"\b(?:,?\s+(\d{4}))?", t)
+        if m:
+            day, mon, year = int(m.group(1)), _MONTHS[m.group(2)], int(m.group(3)) if m.group(3) else None
+    if day is None:
+        m = re.search(r"\b" + _MON + r"\s+" + _DAY + r"\b(?:,?\s+(\d{4}))?", t)
+        if m:
+            mon, day, year = _MONTHS[m.group(1)], int(m.group(2)), int(m.group(3)) if m.group(3) else None
+    if day is None:
+        m = re.search(r"\b(\d{1,2})/(\d{1,2})\b", t)
+        if m:
+            day, mon = int(m.group(1)), int(m.group(2))
+    if day is None or not mon:
+        return None
+    try:
+        if year:
+            return date(year, mon, day), ""
+        d = date(base.year, mon, day)
+        if d < base:
+            d = date(base.year + 1, mon, day)
+        return d, ""
+    except ValueError:
+        return None
+
+
 def _calendar(text, base):
     """Calendar dates ('October 30', '30 Oct', '30/10', '2026-10-30') through dateparser."""
     try:
         import dateparser
-    except ImportError:                                           # pragma: no cover
-        return None
+    except ImportError:                                           # dateparser not installed: use the small built-in reader
+        return _calendar_basic(text, base)
     d = dateparser.parse(text, settings={"RELATIVE_BASE": datetime(base.year, base.month, base.day, 12),
                                          "PREFER_DATES_FROM": "future", "DATE_ORDER": "DMY",
                                          "RETURN_AS_TIMEZONE_AWARE": False, "STRICT_PARSING": False})
@@ -295,6 +359,21 @@ def people_from_users(users):
     return people
 
 
+# Verbs that name a piece of work. A sentence with no owner and no deadline must use one of these to count as a task.
+WORK_VERBS = set("""send email mail write draft prepare review check update schedule book finalize finalise complete submit
+circulate share contact call follow confirm arrange organize organise research investigate test fix deploy report present
+document collect compile order notify inform remind approve sign publish upload create build implement develop design finish
+deliver provide gather analyze analyse evaluate assess plan set resolve escalate coordinate process pay renew cancel reschedule
+file log record summarize summarise handle clean install configure migrate monitor verify validate negotiate hire onboard
+follow-up talk speak meet reach tell print assign decide determine finalise discuss raise ask request propose distribute forward reply respond""".split())
+WH_QUESTION_RX = re.compile(r"^\W*(?:\w+\W+){0,3}?(why|where|how|what|which|who|when|does|do|did|is|are|isn't|aren't)\b[^.]*\?\s*$|\?\s*$", re.I)
+SPEECH_ACTS = set("tell present list share raise remind show explain introduce summarize summarise recap begin open close walk".split())
+QUESTION_START_RX = re.compile(r"(?:^|[.?!]\s*|\b(?:um|uh|so|and|but|okay|well|then)\s+)(?:do|does|did|are|is|can|could|should|would|shall|will)\s+(?:we|you|i|they|it|this|that|he|she)\b", re.I)
+GROUP_OPINION_RX = re.compile(r"\b(should|want(?:ed)? to|wanna|ought|must|i (?:think|guess|suppose|believe|feel)|maybe|probably)\b", re.I)
+PRODUCT_DESIGN_VERBS = {"design", "build", "develop", "implement", "create", "provide", "evaluate", "make", "use"}
+POSSIBILITY_RX = re.compile(r"\b(you|we|they|it|one|people|users?)\s+(?:\w+\s+)?(can|could|may|might)\b", re.I)
+
+
 class NameIndex:
     def __init__(self, people):
         self.people = people
@@ -313,10 +392,25 @@ class NameIndex:
     def exact(self, text):
         return self.by_alias.get(self._k(text), set())
 
+    @staticmethod
+    def _skel(s):
+        """Rough sound-alike key: first letter + consonants, so 'Alee' and 'Ali' both become 'al'."""
+        s = re.sub(r"[^a-z]", "", s.lower())
+        if not s:
+            return ""
+        return re.sub(r"(.)\1+", r"\1", s[0] + re.sub(r"[aeiouyh]", "", s[1:]))
+
+    def _sound_alike(self, key):
+        sk = self._skel(key)
+        if len(sk) < 2:
+            return set()
+        ids = {i for alias, found in self.by_alias.items() if len(alias) >= 3 and self._skel(alias) == sk for i in found}
+        return ids if len(ids) == 1 else set()
+
     def fuzzy(self, text, threshold=0.86):
         key = self._k(text)
         if len(key) < 4:
-            return set()
+            return self._sound_alike(key) if len(key) == 3 else set()
         scored = {}
         for alias, ids in self.by_alias.items():
             if len(alias) < 4 or abs(len(alias) - len(key)) > 2:
@@ -326,7 +420,7 @@ class NameIndex:
                 for i in ids:
                     scored[i] = max(scored.get(i, 0), r)
         if not scored:
-            return set()
+            return self._sound_alike(key)
         ranked = sorted(scored.items(), key=lambda kv: -kv[1])
         if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < 0.06:
             return set(i for i, _ in ranked[:2])                 # too close to call: ambiguous
@@ -510,14 +604,15 @@ class Extractor:
             if name == "MODAL":
                 v, m = doc[toks[0]], doc[toks[1]]
                 lem = m.lemma_.lower()
+                asks_you = is_question or (m.i + 1 < len(doc) and doc[m.i + 1].lower_ == "you")   # Whisper often drops the "?"
                 if lem == "would":
-                    if not (is_question and any(c.lower_ == "you" for c in v.children)):
+                    if not (asks_you and any(c.lower_ == "you" for c in v.children)):
                         continue
                     strength = "MEDIUM"
                 else:
                     strength = "STRONG" if lem in STRONG_MODALS else "MEDIUM" if lem in MEDIUM_MODALS else "WEAK"
                 kind = "modal"
-                if is_question and lem in ("can", "could", "will", "would") and any(c.lower_ == "you" for c in v.children):
+                if asks_you and lem in ("can", "could", "will", "would") and any(c.lower_ == "you" for c in v.children):
                     kind, strength = "request", "MEDIUM"
                 cands[v.i] = _Cand(v, kind, strength)
             elif name == "GOING_TO":
@@ -576,6 +671,8 @@ class Extractor:
                 for r in roots:
                     voc_idx = {i for m in mentions if self._is_vocative(doc, m) for i in range(m["s"], m["e"])}
                     if (r.pos_ == "VERB" and r.tag_ == "VB" and r.i not in cands
+                            and not (r.lemma_.lower() in DELEGATION and any(
+                                c.dep_ in ("xcomp", "ccomp") and c.pos_ == "VERB" for c in r.children))   # "Tell Ali to send it"
                             and not any(c.dep_ in ("nsubj", "nsubjpass", "expl") and c.i not in voc_idx for c in r.children)
                             and not any(c.dep_ == "aux" for c in r.children)):
                         polite = any(c.lower_ in ("please", "kindly") for c in r.children) or \
@@ -585,6 +682,26 @@ class Extractor:
                         if has_vocative or polite or flags["marker"] or (dated and r.i == sent.root.i) or \
                                 (urgent and r.i == sent.root.i):
                             cands[r.i] = _Cand(r, "imperative", "MEDIUM")
+        # "Sara, you set up the demo environment." (a directive without a modal)
+        if not is_question:
+            for m in mentions:
+                if self._is_vocative(doc, m) and m["s"] == 0:
+                    i = m["e"] + (1 if m["e"] < len(doc) and doc[m["e"]].text in (",", ":") else 0)
+                    if i + 1 < len(doc) and doc[i].lower_ == "you" and doc[i + 1].pos_ == "VERB" \
+                            and doc[i + 1].i not in cands and not any(c.dep_ in ("aux", "auxpass", "neg") for c in doc[i + 1].children) \
+                            and (doc[i + 1].tag_ in ("VBP", "VB") or doc[i + 1].lemma_.lower() in INVARIANT_PAST):
+                        cands[doc[i + 1].i] = _Cand(doc[i + 1], "imperative", "MEDIUM")
+        # "Sara sends the invoice by Wednesday": present tense with a named person and a future "by" date is a plan
+        if not is_question:
+            by_tok = {i: m for m in mentions for i in range(m["s"], m["e"])}
+            if any(d["date"] and re.match(r"(?i)(?:by|before|until|till|no later than)\b", d["phrase"]) for d in self._dl) \
+                    and not re.search(r"\b(?:every|each|usually|always|daily|weekly|monthly|normally|typically)\b", doc.text, re.I):
+                for t in doc:
+                    if t.pos_ == "VERB" and t.tag_ in ("VBZ", "VBP") and t.i not in cands and t.dep_ in ("ROOT", "conj") \
+                            and not any(c.dep_ in ("aux", "auxpass", "neg") for c in t.children):
+                        sj = next((c for c in t.children if c.dep_ == "nsubj" and c.i in by_tok and len(by_tok[c.i]["ids"]) == 1), None)
+                        if sj is not None:
+                            cands[t.i] = _Cand(t, "modal", "MEDIUM")
         # conjoined verbs inherit the cue: "will prepare the report and send it to Sara"
         for c in list(cands.values()):
             for cj in c.v.conjuncts:
@@ -624,6 +741,8 @@ class Extractor:
     @staticmethod
     def _is_vocative(doc, m):
         s, e = m["s"], m["e"]
+        if e + 1 < len(doc) and doc[e].lower_ in ("can", "could", "would", "will", "should") and doc[e + 1].lower_ == "you":
+            return True                                         # "Fatima can you also update the readme"
         if s == 0 or (s <= 1 and doc[0].is_punct):
             return e < len(doc) and doc[e].text in (",", ":", "-", "—")
         if e < len(doc) and doc[e].text == "," and s > 0 and doc[s - 1].lower_ in ("hi", "hey", "okay", "ok", "so", "and",
@@ -687,6 +806,8 @@ class Extractor:
         mentions = self._mentions(doc)
         is_question = text.rstrip().endswith("?")
         sent_people = [m["ids"] for m in mentions]
+        if not is_question and self._take_over(text, raw, mentions):
+            return
 
         if ctx.pending_ttl > 0:
             ctx.pending_ttl -= 1
@@ -699,10 +820,15 @@ class Extractor:
         hint = set(ctx.pending["_meta"]["addressee"]) if ctx.pending and ctx.pending["_meta"].get("addressee") else set()
         if not hint:
             no, ids = getattr(ctx, "addressed", (-10, set()))
-            if ctx.sentence_no - no <= 2 and len(ids) == 1:
+            if ctx.sentence_no - no <= 2 and len(ids) == 1 and flags["ack"]:   # only a reply ("Sure, I will…") belongs to who was just addressed
                 hint = set(ids)
         for cand in sorted(cands.values(), key=lambda c: c.v.i):
             new_items.extend(self._build(doc, text, raw, cand, cands, flags, mentions, is_question, hint))
+        if not new_items:
+            new_items.extend(self._owner_of(doc, text, raw, mentions, is_question))
+        ms = self._make_sure_of(text, raw, is_question)
+        if ms:
+            new_items = ms        # "Name, make sure …" is read the same way whatever the parser made of the clause
 
         # acknowledgement of a request: "Sure, I will do it by Friday."
         if ctx.pending is not None and not is_question:
@@ -752,10 +878,180 @@ class Extractor:
             ctx.recent_people.append((ctx.sentence_no, ids))
         self._remember_object(doc, mentions)
 
+    _NO_SPLIT_BEFORE = {"that", "if", "because", "when", "while", "since", "as", "whether", "unless", "once", "which", "who",
+                        "think", "believe", "said", "say", "says", "hope", "guess", "suppose", "maybe", "perhaps",
+                        "probably", "tell", "told", "ask", "asked", "hear", "heard", "know", "knew", "then", "whom",
+                        "what", "how", "where", "why", "unless", "than", "like", "of", "to", "for", "with", "by"}
+    _SPLIT_CONJ = {"and", "but", "so", "or", "then"}
+
+    def retract(self, text):
+        """"Ali will send it, no wait, Sara will send it": the first clause is withdrawn, keep the correction."""
+        m = None
+        for m in CORRECTION_RX.finditer(text):
+            rest = text[m.end():]
+            first = re.match(r"[A-Za-z']+", rest)
+            if first and any(first.group(0).lower() == a.lower().split()[0] for p in self.ctx.names.people for a in p["aliases"]):
+                return rest
+        return text
+
+    def split_runon(self, text):
+        """Whisper sometimes drops punctuation: 'ali will send it sara will prepare the slides'.
+        Puts a sentence break before a participant's name that starts a new 'NAME will/needs to/should...' clause."""
+        keys = sorted({a for p in self.ctx.names.people for a in p["aliases"] if len(a) >= 3}, key=len, reverse=True)
+        if not keys or not text:
+            return text
+        lowkeys = {k.lower() for k in keys}
+        rx = re.compile(r"\b((?i:" + "|".join(re.escape(k) for k in keys) + r"))\s+(?=(?i:will|should|must|needs? to|"
+                        r"has to|have to|is going to|can you|could you|would you)\b)")
+        out, last = [], 0
+        for m in rx.finditer(text):
+            left = text[last:m.start()]
+            words = (text[:m.start()]).split()
+            if not words:
+                continue
+            prev = words[-1]
+            if prev[-1] in ".!?:;":
+                continue
+            pl = prev.lower().strip(",")
+            if DATE_WORD_RX.match(pl) or (len(words) >= 2 and words[-2].lower() in DATE_LEADS):
+                continue                                       # "By Friday Ali will finish it": the date belongs to this clause
+            conj = None
+            if pl in self._SPLIT_CONJ:
+                conj = pl
+                before = words[-2].lower().strip(",") if len(words) >= 2 else ""
+                if before in lowkeys or before in ("you", "i", "we", "they"):
+                    continue                                   # "Sara and Ali will test it": one shared subject
+                if len(words) >= 2 and words[-2].endswith(","):
+                    pass
+            elif pl in self._NO_SPLIT_BEFORE:
+                continue
+            cut = m.start()
+            if conj is not None:
+                cut = text.rfind(prev, 0, m.start())
+            out.append(text[last:cut].rstrip(" ,") + ".")
+            last = m.start()
+            name = m.group(1)
+            out.append("")
+            # capitalise the name so it is read as one
+            text = text[:m.start(1)] + name.title() + text[m.end(1):]
+        out.append(text[last:])
+        return " ".join(x for x in out if x != "").strip()
+
+    def _owner_of(self, doc, text, raw, mentions, is_question):
+        """"Bilal will be responsible for the deployment on the 18th": a noun, not a verb, is the work."""
+        ctx = self.ctx
+        items = []
+        if is_question:
+            return items
+        by_tok = {i: m for m in mentions for i in range(m["s"], m["e"])}
+        for t in doc:
+            lem = t.lemma_.lower()
+            if not ((lem == "responsible" and t.dep_ in ("acomp", "attr", "ROOT")) or
+                    (lem == "charge" and t.i > 0 and doc[t.i - 1].lower_ == "in")):
+                continue
+            pr = next((c for c in t.children if c.dep_ == "prep" and c.lower_ in ("for", "of")), None)
+            pobj = next((g for g in pr.children if g.dep_ == "pobj" and g.pos_ in ("NOUN", "PROPN")), None) if pr else None
+            if pobj is None:
+                continue
+            anc = t
+            while anc.head.i != anc.i and anc.pos_ not in ("AUX", "VERB"):
+                anc = anc.head
+            subj = next((c for c in anc.children if c.dep_ == "nsubj" and c.i in by_tok), None)
+            if subj is None or len(by_tok[subj.i]["ids"]) != 1:
+                continue
+            if any(c.dep_ == "neg" for c in anc.children) or anc.tag_ in ("VBD", "VBN"):
+                continue
+            pid = next(iter(by_tok[subj.i]["ids"]))
+            future = any(c.lower_ in ("will", "'ll", "shall", "must") or (c.lower_ == "going") for c in anc.children)
+            skip = set()
+            dl = next((d for d in self._dl if d["date"] and d["toks"] & {x.i for x in pobj.subtree}), None) or \
+                next((d for d in self._dl if d["date"]), None)
+            for d in self._dl:
+                if d["drop"]:
+                    skip |= d["toks"]
+            phrase = " ".join(x.text for x in doc[pobj.left_edge.i:pobj.right_edge.i + 1] if x.i not in skip).strip()
+            phrase = re.sub(r"\s+(?:on|by|before|until|for|at|in)$", "", phrase).strip()
+            if len(phrase.split()) < 1:
+                continue
+            title = "Handle " + (phrase if re.match(r"(?i)(the|a|an|our|my|his|her|their|this|that)\b", phrase) else "the " + phrase)
+            items.append({
+                "title": title, "description": "", "assignee": ctx.names.names[pid], "assignee_id": pid,
+                "deadline": dl["date"].isoformat() if dl else None,
+                "priority": "HIGH" if dl and (dl["date"] - ctx.base).days <= 1 else "MEDIUM",
+                "confidence": "HIGH" if future else "MEDIUM",
+                "uncertainty_note": "" if future else "Said as a general responsibility, not a firm promise.",
+                "source_context": raw.strip()[:400],
+                "_meta": {"kind": "control", "subject_kind": "person", "vague": False, "addressee": set(),
+                          "vi": pobj.i, "sent": ctx.sentence_no, "conj": set(), "deadline_note": dl["note"] if dl else ""},
+            })
+        return items
+
+    MAKE_SURE_RX = re.compile(r"^(?:(?i:and|so|okay|ok|also|well|now|then)[,\s]+)*(?P<name>[A-Z][\w'\-]+),?\s+(?:(?i:please)\s+)?"
+                              r"(?i:make\s+sure|ensure|see\s+to\s+it)\s+(?:that\s+)?(?P<rest>.+?)[.!]?$")
+
+    def _make_sure_of(self, text, raw, is_question):
+        """Safety net for "Sarah, make sure the test accounts are working before the demo." when the parser gets the
+        clause wrong: a named person + 'make sure' is a clear instruction whatever the rest of the sentence looks like."""
+        if is_question:
+            return []
+        m = self.MAKE_SURE_RX.match(text.strip())
+        if not m:
+            return []
+        ctx = self.ctx
+        name, rest = m.group("name"), m.group("rest").strip()
+        ids = ctx.names.exact(name) or ctx.names.fuzzy(name)
+        if len(ids) > 1 or len(rest.split()) < 2:
+            return []
+        iso, phrase, note = find_deadline(rest, ctx.base)
+        if phrase:
+            rest = re.sub(r"\s*(?:\b(?:by|before|on|until|for)\s+)?" + re.escape(phrase) + r"\s*$", "", rest).strip()
+            rest = re.sub(r"\s+(?:by|before|on|until|for)$", "", rest).strip()
+        title = "Make sure " + rest
+        if ids:
+            pid = next(iter(ids))
+            who, note_txt = ctx.names.names[pid], ""
+        elif name.lower() in GROUP_WORDS or name.lower() in EXTERNAL_WORDS:
+            return []
+        else:
+            pid, who, note_txt = None, None, f"'{name}' is not a participant of this meeting."
+        return [{
+            "title": title, "description": "", "assignee": who, "assignee_id": pid, "deadline": iso,
+            "priority": "HIGH" if iso and (date.fromisoformat(iso) - ctx.base).days <= 1 else "MEDIUM",
+            "confidence": "HIGH" if pid else "MEDIUM", "uncertainty_note": note_txt or (note or ""),
+            "source_context": raw.strip()[:400],
+            "_meta": {"kind": "make_sure", "subject_kind": "person", "vague": False, "addressee": set(),
+                      "vi": 0, "sent": ctx.sentence_no, "conj": set(), "deadline_note": note or "", "marker": True},
+        }]
+
+    def _take_over(self, text, raw, mentions):
+        """"Usman, you take that one and get it done by Friday": gives the nearest ownerless task to the named person."""
+        ctx = self.ctx
+        if not TAKE_OVER_RX.search(text) or len(mentions) != 1 or len(mentions[0]["ids"]) != 1:
+            return False
+        pid = next(iter(mentions[0]["ids"]))
+        target = None
+        for it in reversed(ctx.items):
+            if ctx.sentence_no - it["_meta"]["sent"] > 3:
+                break
+            if it["assignee_id"] is None:
+                target = it
+                break
+        if target is None:
+            return False
+        target["assignee_id"], target["assignee"] = pid, ctx.names.names[pid]
+        dl, phrase, note = find_deadline(text, ctx.base)
+        if dl and not target["deadline"]:
+            target["deadline"] = dl
+        target["confidence"] = "MEDIUM"
+        target["uncertainty_note"] = "Owner taken from a later sentence ('you take that one')."
+        target["source_context"] = (target["source_context"] + " " + raw.strip())[:400]
+        return True
+
     # ---------------------------------------------------------------- text helpers
     @staticmethod
     def _clean(text):
         t = FILLER_RX.sub("", text or "")
+        t = TODO_FOR_RX.sub(r"\1, ", t)                                            # "Todo for Hamza, write..." -> "Hamza, write..."
         t = re.sub(r"\b((?:\w+\s+){1,2}?)\1+", r"\1", t, flags=re.I) if False else t
         t = re.sub(r"\b(\w+)(?:\s+\1\b)+", r"\1", t, flags=re.I)                  # "I I will" -> "I will"
         t = re.sub(r"\b(\w+\s+\w+)(?:\s+\1\b)+", r"\1", t, flags=re.I)            # "I will I will" -> "I will"
@@ -826,8 +1122,9 @@ class Extractor:
                 kinds.append("group")
             elif lem in ROLE_WORDS:
                 kinds.append("role")
-            elif t.ent_type_ == "PERSON":
-                kinds.append("unmatched")
+            elif t.ent_type_ == "PERSON" or (t.pos_ == "PROPN" and t.text[:1].isupper() and t.ent_type_ in ("", "ORG", "GPE", "NORP")
+                                              and low not in EXTERNAL_WORDS and lem not in EXTERNAL_WORDS):
+                kinds.append("unmatched")      # a capitalised name that is not on the participant list (the small spaCy model often calls names ORG)
             elif low in EXTERNAL_WORDS or lem in EXTERNAL_WORDS:
                 kinds.append("outsider")
             else:
@@ -937,6 +1234,10 @@ class Extractor:
     def _build(self, doc, text, raw, cand, cands, flags, mentions, is_question, hint):
         ctx = self.ctx
         v = cand.v
+        if v.lemma_.lower() == "mind":                                        # "would you mind booking the flights?"
+            g = next((c for c in v.children if c.tag_ == "VBG" and c.dep_ in ("xcomp", "ccomp", "advcl")), None)
+            if g is not None:
+                v = g
         if not is_action_verb(v):
             return []
         for h in [v] + ([cand.ctrl] if cand.ctrl is not None and cand.ctrl.lemma_.lower() != "forget" else []):
@@ -944,7 +1245,8 @@ class Extractor:
                 return []
         passive = any(c.dep_ == "auxpass" for c in v.children) or (v.tag_ == "VBN" and cand.kind != "imperative"
                                                                     and not any(c.lower_ in ("have", "has", "had") for c in v.children))
-        if v.tag_ == "VBD" or (v.tag_ == "VBN" and not passive):
+        if (v.tag_ == "VBD" and not (cand.kind == "imperative" and v.lemma_.lower() in INVARIANT_PAST)) \
+                or (v.tag_ == "VBN" and not passive):
             return []
         if any(c.dep_ == "aux" and c.lower_ in ("have", "had", "'ve") for c in v.children):
             return []                                           # "should have sent": past
@@ -997,9 +1299,31 @@ class Extractor:
                     return []
             if skind == "inanimate" or skind == "outsider" or skind == "group" or skind == "speaker":
                 return []
+        if kind == "make_sure" and skind in ("inanimate", "outsider") and vocative and not is_question and not passive:
+            # "Bilal, make sure the backups are running": the whole clause is what the person must check.
+            head = cand.ctrl if cand.ctrl is not None else v
+            for _ in range(4):
+                if head.lemma_.lower() in ("make", "ensure", "see", "remember", "be") or head.head.i == head.i:
+                    break
+                head = head.head
+            if head.lemma_.lower() in ("make", "ensure", "see", "remember", "be") and head.i < v.i:
+                v = head
+                skind, sets = "person", [set(vocative)]
         if skind in ("negated", "outsider", "inanimate"):
             return []
-        if skind == "group" and (HEDGE_RX.search(text) or v.lemma_.lower() in ("meet", "gather", "reconvene", "catch")):
+        lem_v = v.lemma_.lower()
+        if lem_v in SPEECH_ACT_VERBS:
+            return []                                              # "I want to thank the team"
+        if lem_v in ("write", "note", "jot") and any(c.lower_ == "down" for c in v.children):
+            return []                                              # "write that down"
+        if skind in ("group", "speaker", "none") and not vocative and not any(
+                d["date"] and d["date"] > ctx.base for d in self._dl):
+            if lem_v in AGENDA_VERBS or (any(c.lower_ in AGENDA_PHRASES.get(lem_v, ()) for c in v.children)
+                                         and AGENDA_TIME_RX.search(text)):
+                return []                                          # agenda talk, not a task
+        if skind == "group" and (v.lemma_.lower() in ("meet", "gather", "reconvene", "catch")
+                                 or (HEDGE_STRONG_RX.search(text) and strength != "STRONG")
+                                 or (HEDGE_RX.search(text) and strength == "WEAK")):
             return []
         if skind == "none" and vocative and kind in ("make_sure", "control") and not passive:
             skind, sets = "person", [set(vocative)]
@@ -1082,7 +1406,9 @@ class Extractor:
         dls = [d for d in self._dl if d["toks"] & region]
         if not dls and len(cands) == 1:
             dls = list(self._dl)
-        dl = next((d for d in dls if d["date"]), None)
+        own = {x.i for x in v.subtree}
+        dl = min((d for d in dls if d["date"]), default=None,
+                 key=lambda d: (0 if d["toks"] & own else 1, min(abs(i - v.i) for i in d["toks"])))
         dl_note = next((d["note"] for d in dls if d["note"] and not d["date"]), "")
         drop = set()
         for d in self._dl:
@@ -1122,7 +1448,9 @@ class Extractor:
             obj_vague = True
         if len(title.split()) < 2 and not obj_vague:
             return []
-        vague = obj_vague or (v.lemma_.lower() == "do" and not _has_object(v))
+        pobj_vague = dobj is None and any(g.dep_ == "pobj" and g.lower_ in VAGUE_OBJECTS and not list(g.children)
+                                          for pr in v.children if pr.dep_ == "prep" for g in pr.children)
+        vague = obj_vague or pobj_vague or (v.lemma_.lower() == "do" and not _has_object(v))
 
         # ---- priority
         sent_text = text
@@ -1184,7 +1512,7 @@ class Extractor:
                 "uncertainty_note": " ".join(dict.fromkeys(n for n in notes if n)),
                 "source_context": raw.strip()[:400],
                 "_meta": {"kind": kind, "subject_kind": skind, "vague": vague, "addressee": addressee,
-                          "vi": v.i, "sent": ctx.sentence_no, "conj": {c.i for c in v.conjuncts} | ({v.head.i} if v.dep_ == "conj" else set()), "deadline_note": dl["note"] if dl else ""},
+                          "vi": v.i, "sent": ctx.sentence_no, "marker": bool(flags["marker"]), "conj": {c.i for c in v.conjuncts} | ({v.head.i} if v.dep_ == "conj" else set()), "deadline_note": dl["note"] if dl else ""},
             })
         return items
 
@@ -1210,12 +1538,38 @@ class Extractor:
         pend["_meta"]["confirmed"] = True
 
     # ---------------------------------------------------------------- finish
+    @staticmethod
+    def _is_discussion(it):
+        """True for a sentence that only sounds like a task: design talk, options, opinions, in-meeting questions.
+        Found by running the extractor on real recorded meetings (AMI / QMSum), where such sentences were ~95% of the output.
+        Only applies to items with NO owner and NO deadline: anything with either is kept for the manager to review."""
+        if it["assignee_id"] is not None or it["deadline"]:
+            return False
+        m = it.get("_meta", {})
+        if m.get("marker") or m.get("addressee") or "not a participant" in it.get("uncertainty_note", ""):
+            return False         # a named person who is not in the meeting: the manager should see it
+        src = it.get("source_context", "")
+        first = re.sub(r"[^a-z]", "", (it.get("title") or "").split(" ")[0].lower())
+        if WH_QUESTION_RX.search(src) or POSSIBILITY_RX.search(src):
+            return True
+        if first in SPEECH_ACTS or QUESTION_START_RX.search(src):
+            return True          # "I'll tell you about it", "I will present the concept": things said IN the meeting, not work after it
+        if m.get("subject_kind") == "group" and (GROUP_OPINION_RX.search(src) or first in PRODUCT_DESIGN_VERBS):
+            return True          # "I think we should design…", "we want to build…": opinions about the product, not tasks
+        if m.get("kind") == "request":
+            return True          # "can you read that?" with nobody named: a question, not an assignment
+        return first not in WORK_VERBS
+
+    # ---------------------------------------------------------------- finish
     def finish(self):
         items = self._share_deadlines(self.ctx.items)
         items = self._dedupe(items)
+        if os.getenv("EXTRACTION_DROP_DISCUSSION", "1") != "0":   # set to 0 in .env to see every candidate again
+            items = [it for it in items if not self._is_discussion(it)]
         out = []
         for it in items:
             it = dict(it)
+            it["first_person"] = it.get("_meta", {}).get("subject_kind") == "speaker"   # "I will…": the speaker is not named in a transcript
             it.pop("_meta", None)
             it["discard"] = False
             it["proof_required"] = False
@@ -1294,10 +1648,12 @@ def extract_action_items(sentences, people, meeting_date=None):
         ex = Extractor(people, base)
         if isinstance(sentences, str):
             nlp = ex.nlp
-            sentences = [s.text.strip() for s in nlp(sentences).sents if s.text.strip()]
+            sentences = [s.text.strip() for s in nlp(ex.split_runon(ex.retract(sentences))).sents if s.text.strip()]
         for s in list(sentences)[:MAX_SENTENCES]:
             if isinstance(s, dict):
                 s = s.get("text", "")
             if s and str(s).strip():
-                ex.feed(str(s))
+                for part in re.split(r"(?<=[.!?])\s+(?=[A-Z])", ex.split_runon(ex.retract(str(s)))):
+                    if part.strip():
+                        ex.feed(part)
         return ex.finish()
