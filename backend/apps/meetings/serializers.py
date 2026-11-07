@@ -24,6 +24,7 @@ class MeetingSerializer(serializers.ModelSerializer):
         many=True, write_only=True, queryset=User.objects.filter(role="EMPLOYEE", is_active=True))
     participants = serializers.SerializerMethodField()
     manager_name = serializers.CharField(source="manager.display_name", read_only=True)
+    owner = serializers.SerializerMethodField()
     has_audio = serializers.SerializerMethodField()
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all(), required=False, allow_null=True)
     project_name = serializers.CharField(source="project.name", default=None, read_only=True)
@@ -70,7 +71,7 @@ class MeetingSerializer(serializers.ModelSerializer):
     class Meta:
         model = Meeting
         fields = ["id", "title", "description", "scheduled_at", "meeting_mode", "location", "started_at", "is_confidential", "project", "project_name","status",
-                  "processing_error", "processing_cancel_requested", "manager_name", "participant_ids", "participants",
+                  "processing_error", "processing_cancel_requested", "manager_name", "owner", "participant_ids", "participants",
                   "has_audio", "created_at", "progress"]
         read_only_fields = ["status", "processing_error", "processing_cancel_requested", "started_at"]
 
@@ -83,6 +84,10 @@ class MeetingSerializer(serializers.ModelSerializer):
                 d["pseudonym"] = l.pseudonym  # identity mapping is manager-only
             out.append(d)
         return out
+
+    def get_owner(self, m):
+        """The meeting owner can own tasks (said as "I will…") even when not listed as a participant."""
+        return {"id": m.manager_id, "name": m.manager.display_name}
 
     def get_has_audio(self, m):
         return bool(m.audio)
@@ -117,6 +122,7 @@ class OutputSerializer(serializers.ModelSerializer):
    
     def validate_action_items(self, items):
         valid = set(self.instance.meeting.links.values_list("user_id", flat=True))
+        valid.add(self.instance.meeting.manager_id)   # the meeting owner may own tasks said as "I will…"
         out = []
         for i, it in enumerate(items, 1):
             try:
@@ -151,6 +157,8 @@ class OutputSerializer(serializers.ModelSerializer):
             link.user_id: link.user
             for link in instance.meeting.links.select_related("user")
         }
+        owner = instance.meeting.manager
+        participants.setdefault(owner.id, owner)   # the meeting owner may own tasks even if not listed as a participant
 
         # Add employee names to the API response.
         for item in data.get("action_items", []):
