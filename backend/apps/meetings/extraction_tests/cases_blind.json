@@ -1,0 +1,309 @@
+[
+  {
+    "name": "Standup style",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Morning all. Yesterday Bilal finished the payment integration. Today he will write the integration tests. Ayesha is blocked on the API keys so Usman should send them to her before noon. Fatima will present the prototype to the client on Friday. Anything else? No. Great.",
+    "expected": [
+      {
+        "keywords": [
+          "integration tests"
+        ],
+        "owner": "Bilal Shah"
+      },
+      {
+        "keywords": [
+          "api keys"
+        ],
+        "owner": "Usman Tariq",
+        "deadline": "2026-11-02"
+      },
+      {
+        "keywords": [
+          "prototype"
+        ],
+        "owner": "Fatima Zahra",
+        "deadline": "2026-11-06"
+      }
+    ]
+  },
+  {
+    "name": "Customer call recap",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "So the customer wants a demo next Monday. Sara, you set up the demo environment. Hamza, prepare the sample data for it. I'll email the customer the agenda tonight. Ali, please double check the pricing sheet before it goes out.",
+    "expected": [
+      {
+        "keywords": [
+          "demo environment"
+        ],
+        "owner": "Sara Ahmed"
+      },
+      {
+        "keywords": [
+          "sample data"
+        ],
+        "owner": "Hamza Raza"
+      },
+      {
+        "keywords": [
+          "agenda"
+        ],
+        "owner": null,
+        "deadline": "2026-11-02",
+        "optional": true
+      },
+      {
+        "keywords": [
+          "pricing sheet"
+        ],
+        "owner": "Ali Khan"
+      }
+    ]
+  },
+  {
+    "name": "Chatty with corrections",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Ali will send the invoice, no wait, Sara will send the invoice because Ali is on leave. Okay so Sara sends the invoice by Wednesday.",
+    "expected": [
+      {
+        "keywords": [
+          "invoice"
+        ],
+        "owner": "Sara Ahmed",
+        "deadline": "2026-11-04"
+      }
+    ]
+  },
+  {
+    "name": "Retro (mostly no tasks)",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "The sprint went well overall. We shipped most of the stories. The team felt the standups were too long. Bilal suggested shorter standups. We agreed that pair programming helped. Next retro is in two weeks.",
+    "expected": []
+  },
+  {
+    "name": "Blockers and follow ups",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "The build keeps failing on the CI. Hamza will investigate the CI failure today and report back. Fatima needs to follow up with legal about the NDA by Thursday. Someone should also update the wiki.",
+    "expected": [
+      {
+        "keywords": [
+          "ci failure"
+        ],
+        "owner": "Hamza Raza",
+        "deadline": "2026-11-02"
+      },
+      {
+        "keywords": [
+          "report back"
+        ],
+        "owner": "Hamza Raza",
+        "optional": true
+      },
+      {
+        "keywords": [
+          "nda"
+        ],
+        "owner": "Fatima Zahra",
+        "deadline": "2026-11-05"
+      },
+      {
+        "keywords": [
+          "wiki"
+        ],
+        "owner": null,
+        "optional": true
+      }
+    ]
+  },
+  {
+    "name": "Numbers and names near verbs",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Usman will email Sara the Q3 numbers. Ali will give Ayesha access to the repo. Bilal will ask Fatima for the logo files.",
+    "expected": [
+      {
+        "keywords": [
+          "q3 numbers"
+        ],
+        "owner": "Usman Tariq"
+      },
+      {
+        "keywords": [
+          "access"
+        ],
+        "owner": "Ali Khan"
+      },
+      {
+        "keywords": [
+          "logo files"
+        ],
+        "owner": "Bilal Shah"
+      }
+    ]
+  },
+  {
+    "name": "Hypotheticals and wishes (no tasks)",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "I wish we had more time. It would be nice if the tool supported dark mode. If we had budget we could hire two more people. What if we moved the launch? I hope everything goes well.",
+    "expected": []
+  },
+  {
+    "name": "Deadlines in the middle",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "By Friday Ali will finish the report. On Tuesday Sara will review the contract. Before the release Hamza will clean up the logs. Tomorrow Bilal will update the board.",
+    "expected": [
+      {
+        "keywords": [
+          "report"
+        ],
+        "owner": "Ali Khan",
+        "deadline": "2026-11-06"
+      },
+      {
+        "keywords": [
+          "contract"
+        ],
+        "owner": "Sara Ahmed",
+        "deadline": "2026-11-03"
+      },
+      {
+        "keywords": [
+          "logs"
+        ],
+        "owner": "Hamza Raza",
+        "deadline": null
+      },
+      {
+        "keywords": [
+          "board"
+        ],
+        "owner": "Bilal Shah",
+        "deadline": "2026-11-03"
+      }
+    ]
+  },
+  {
+    "name": "Negative commitments",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Ali can't make it to the workshop. Sara won't be sending the report today. Hamza is not going to fix that bug because it is out of scope.",
+    "expected": []
+  },
+  {
+    "name": "Please + role",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Please ask the design team to send the mockups by Friday. Please make sure legal signs the contract. Could somebody schedule the kickoff for next Monday?",
+    "expected": [
+      {
+        "keywords": [
+          "mockups"
+        ],
+        "owner": null,
+        "deadline": "2026-11-06",
+        "optional": true
+      },
+      {
+        "keywords": [
+          "contract"
+        ],
+        "owner": null,
+        "optional": true
+      },
+      {
+        "keywords": [
+          "kickoff"
+        ],
+        "owner": null,
+        "deadline": "2026-11-09",
+        "optional": true
+      }
+    ]
+  }
+]

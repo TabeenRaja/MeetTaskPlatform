@@ -1,0 +1,491 @@
+[
+  {
+    "name": "Rambling opener with follow-ups",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "okay so first thing the login page is slow and Hamza you said you'd look into it right yeah I'll profile it by Wednesday. Second thing Sara needs to talk to the design team about the new logo. Fatima can you also update the readme when you get a chance",
+    "expected": [
+      {
+        "keywords": [
+          "login"
+        ],
+        "owner": "Hamza Raza",
+        "deadline": "2026-11-04",
+        "optional": true
+      },
+      {
+        "keywords": [
+          "design team"
+        ],
+        "owner": "Sara Ahmed"
+      },
+      {
+        "keywords": [
+          "readme"
+        ],
+        "owner": "Fatima Zahra"
+      }
+    ]
+  },
+  {
+    "name": "Times and day-of-month",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Please send me the signed form by 5 pm tomorrow. Bilal will be responsible for the deployment on the 18th. Ayesha, I'd like you to draft the press release by Thursday.",
+    "expected": [
+      {
+        "keywords": [
+          "signed form"
+        ],
+        "owner": null,
+        "deadline": "2026-11-03"
+      },
+      {
+        "keywords": [
+          "deployment"
+        ],
+        "owner": "Bilal Shah",
+        "deadline": "2026-11-18"
+      },
+      {
+        "keywords": [
+          "press release"
+        ],
+        "owner": "Ayesha Noor",
+        "deadline": "2026-11-05"
+      }
+    ]
+  },
+  {
+    "name": "Opinions and events (no tasks expected)",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "I was thinking about the budget a lot last night. Our competitors released a new product. It would be great to have more tests. The server is down again. Nobody knows why. The client will visit on Monday. The system will go down for maintenance tonight. It will take two weeks to finish.",
+    "expected": []
+  },
+  {
+    "name": "Pronoun he/she and shared owners",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Usman is going to talk to the customer. He will also send the quote. Sara and Ali will test the build on Thursday.",
+    "expected": [
+      {
+        "keywords": [
+          "customer"
+        ],
+        "owner": "Usman Tariq"
+      },
+      {
+        "keywords": [
+          "quote"
+        ],
+        "owner": "Usman Tariq"
+      },
+      {
+        "keywords": [
+          "build"
+        ],
+        "owner": "Sara Ahmed"
+      },
+      {
+        "keywords": [
+          "build"
+        ],
+        "owner": "Ali Khan"
+      }
+    ]
+  },
+  {
+    "name": "Reminders",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Remember to submit your timesheets by Friday everyone. Hamza, don't forget to renew the domain by the 25th.",
+    "expected": [
+      {
+        "keywords": [
+          "timesheets"
+        ],
+        "owner": null,
+        "deadline": "2026-11-06"
+      },
+      {
+        "keywords": [
+          "domain"
+        ],
+        "owner": "Hamza Raza",
+        "deadline": "2026-11-25"
+      }
+    ]
+  },
+  {
+    "name": "Reported speech (no new tasks)",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Ali said he would send the invoice, and he did. Sara promised to finish the slides last week and she did. Hamza told me he fixed the bug.",
+    "expected": []
+  },
+  {
+    "name": "Delegation with ask / tell",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Ask Hamza to review the pull request. Tell Ayesha to send the report by Friday.",
+    "expected": [
+      {
+        "keywords": [
+          "pull request"
+        ],
+        "owner": "Hamza Raza"
+      },
+      {
+        "keywords": [
+          "report"
+        ],
+        "owner": "Ayesha Noor",
+        "deadline": "2026-11-06"
+      }
+    ]
+  },
+  {
+    "name": "Volunteers",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Can someone take care of the cleanup? I can do it. Does anybody want to write the summary? I'll do that tomorrow.",
+    "expected": [
+      {
+        "keywords": [
+          "cleanup"
+        ],
+        "owner": null,
+        "optional": true
+      },
+      {
+        "keywords": [
+          "summary"
+        ],
+        "owner": null,
+        "deadline": "2026-11-03",
+        "optional": true
+      }
+    ]
+  },
+  {
+    "name": "More date forms",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Usman will finish the migration within two weeks. Sara will send the proposal by end of day Friday. Ali will upload the files in 3 days. Bilal will meet the vendor on Tuesday. Ayesha will submit the form by the 5th of December. Fatima will confirm the venue by December 1st.",
+    "expected": [
+      {
+        "keywords": [
+          "migration"
+        ],
+        "owner": "Usman Tariq",
+        "deadline": "2026-11-16"
+      },
+      {
+        "keywords": [
+          "proposal"
+        ],
+        "owner": "Sara Ahmed",
+        "deadline": "2026-11-06"
+      },
+      {
+        "keywords": [
+          "upload",
+          "files"
+        ],
+        "owner": "Ali Khan",
+        "deadline": "2026-11-05"
+      },
+      {
+        "keywords": [
+          "vendor"
+        ],
+        "owner": "Bilal Shah",
+        "deadline": "2026-11-03"
+      },
+      {
+        "keywords": [
+          "form"
+        ],
+        "owner": "Ayesha Noor",
+        "deadline": "2026-12-05"
+      },
+      {
+        "keywords": [
+          "venue"
+        ],
+        "owner": "Fatima Zahra",
+        "deadline": "2026-12-01"
+      }
+    ]
+  },
+  {
+    "name": "Lowercase run-on text",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "ali will send the invoice sara will prepare the slides and hamza needs to fix the bug by friday",
+    "expected": [
+      {
+        "keywords": [
+          "invoice"
+        ],
+        "owner": "Ali Khan"
+      },
+      {
+        "keywords": [
+          "slides"
+        ],
+        "owner": "Sara Ahmed"
+      },
+      {
+        "keywords": [
+          "bug"
+        ],
+        "owner": "Hamza Raza",
+        "deadline": "2026-11-06"
+      }
+    ]
+  },
+  {
+    "name": "I need you to / I'd like you to",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Sara, I need you to update the roadmap by Thursday. Ali, I'd like you to review the design. Hamza, it would be great if you could write the docs.",
+    "expected": [
+      {
+        "keywords": [
+          "roadmap"
+        ],
+        "owner": "Sara Ahmed",
+        "deadline": "2026-11-05"
+      },
+      {
+        "keywords": [
+          "design"
+        ],
+        "owner": "Ali Khan"
+      },
+      {
+        "keywords": [
+          "docs"
+        ],
+        "owner": "Hamza Raza",
+        "optional": true
+      }
+    ]
+  },
+  {
+    "name": "Conditionals (optional)",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "If the tests fail then Ali will roll back the release. Once the contract is signed Sara will send the welcome email.",
+    "expected": [
+      {
+        "keywords": [
+          "roll back"
+        ],
+        "owner": "Ali Khan",
+        "optional": true
+      },
+      {
+        "keywords": [
+          "welcome email"
+        ],
+        "owner": "Sara Ahmed",
+        "optional": true
+      }
+    ]
+  },
+  {
+    "name": "Repeated mentions (no duplicates)",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Ali Khan will send the report. Ali will also review the budget by Friday. Ali Khan will send the report.",
+    "expected": [
+      {
+        "keywords": [
+          "send",
+          "report"
+        ],
+        "owner": "Ali Khan"
+      },
+      {
+        "keywords": [
+          "budget"
+        ],
+        "owner": "Ali Khan",
+        "deadline": "2026-11-06"
+      }
+    ]
+  },
+  {
+    "name": "Status updates mixed with tasks",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Ali is working on the API and it is going well. Sara finished the design yesterday. Hamza will start the testing next Monday. Bilal is still waiting for the credentials. Ayesha, please chase the credentials today.",
+    "expected": [
+      {
+        "keywords": [
+          "testing"
+        ],
+        "owner": "Hamza Raza",
+        "deadline": "2026-11-09"
+      },
+      {
+        "keywords": [
+          "credentials"
+        ],
+        "owner": "Ayesha Noor",
+        "deadline": "2026-11-02"
+      }
+    ]
+  },
+  {
+    "name": "Polite requests",
+    "date": "2026-11-02",
+    "people": [
+      "Ali Khan",
+      "Sara Ahmed",
+      "Hamza Raza",
+      "Bilal Shah",
+      "Ayesha Noor",
+      "Usman Tariq",
+      "Fatima Zahra"
+    ],
+    "text": "Fatima, would you mind booking the flights? Usman, could you send me the figures by Wednesday? Bilal, if you have time, please look at the failing test.",
+    "expected": [
+      {
+        "keywords": [
+          "flights"
+        ],
+        "owner": "Fatima Zahra"
+      },
+      {
+        "keywords": [
+          "figures"
+        ],
+        "owner": "Usman Tariq",
+        "deadline": "2026-11-04"
+      },
+      {
+        "keywords": [
+          "failing test"
+        ],
+        "owner": "Bilal Shah",
+        "optional": true
+      }
+    ]
+  }
+]
