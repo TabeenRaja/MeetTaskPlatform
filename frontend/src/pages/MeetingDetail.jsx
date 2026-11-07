@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   Clock3,
   CloudUpload,
+  Download,
   FileAudio2,
   FileText,
   ChevronDown,
@@ -29,8 +30,109 @@ import {
   X,
 } from "lucide-react";
 
-const ALLOWED = [".mp3", ".wav", ".m4a", ".ogg", ".webm"];
-const MAX_MB = 50;
+const AUDIO_EXT = [".mp3", ".wav", ".m4a", ".ogg", ".webm"];
+const ALLOWED = AUDIO_EXT;
+const MAX_MB = 50; // audio
+
+async function blobErr(e) {
+  try {
+    const data = e.response?.data;
+    if (data instanceof Blob) {
+      const j = JSON.parse(await data.text());
+      return j.detail || (Array.isArray(j) ? j[0] : "Could not load the recording.");
+    }
+  } catch {
+    /* fall through */
+  }
+  return errMsg(e);
+}
+
+// The saved recording stays available after transcription. It is fetched with the login token, so it is loaded on demand.
+function RecordingPlayer({ meetingId, title }) {
+  const [url, setUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(
+    () => () => {
+      if (url) URL.revokeObjectURL(url);
+    },
+    [url],
+  );
+  const fetchBlob = async (download) => {
+    const res = await api.get(`/meetings/${meetingId}/audio/`, {
+      responseType: "blob",
+      params: download ? { download: 1 } : undefined,
+    });
+    return res.data;
+  };
+  const play = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      setUrl(URL.createObjectURL(await fetchBlob(false)));
+    } catch (e) {
+      setErr(await blobErr(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const save = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      const blob = await fetchBlob(true);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `${(title || "meeting").replace(/[^\w.-]+/g, "_")}${blob.type.includes("mpeg") ? ".mp3" : ""}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch (e) {
+      setErr(await blobErr(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-500">
+        The recording is kept on the server after transcription, so you can listen to it again at any time.
+      </p>
+      {url ? (
+        <audio controls autoPlay src={url} className="w-full" />
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={play}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+          >
+            <PlayCircle size={16} /> {busy ? "Loading…" : "Play recording"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={save}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Download size={16} /> Download
+          </button>
+        </div>
+      )}
+      {url && (
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 hover:underline"
+        >
+          <Download size={15} /> Download
+        </button>
+      )}
+      <ErrorBox msg={err} />
+    </div>
+  );
+}
 
 function Card({ title, children, icon: Icon }) {
   return (
@@ -551,9 +653,12 @@ export default function MeetingDetail() {
     if (!file) return;
     const ext = "." + file.name.split(".").pop().toLowerCase();
     if (!ALLOWED.includes(ext))
-      return setUpErr(`Unsupported format. Allowed: ${ALLOWED.join(", ")}`);
-    if (file.size > MAX_MB * 1024 * 1024)
-      return setUpErr(`File too large. Max ${MAX_MB} MB.`);
+      return setUpErr(
+        `Unsupported format. Allowed: ${ALLOWED.join(", ")}`,
+      );
+    const limit = MAX_MB;
+    if (file.size > limit * 1024 * 1024)
+      return setUpErr(`File too large. Max ${limit} MB.`);
     const fd = new FormData();
     fd.append("audio", file);
     const controller = new AbortController();
@@ -1306,6 +1411,11 @@ export default function MeetingDetail() {
 
       {!isScheduled && m.status !== "CANCELLED" && (
         <>
+          {m.has_audio && m.status !== "PROCESSING" && (isMgr || !m.is_confidential) && (
+            <Card title="Meeting recording" icon={FileAudio2}>
+              <RecordingPlayer meetingId={id} title={m.title} />
+            </Card>
+          )}
           <Card title="Transcript" icon={FileText}>
             {!tr && (
               <button
