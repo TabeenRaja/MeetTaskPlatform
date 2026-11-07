@@ -114,6 +114,17 @@ def run_extraction(meeting, sentences, users):
     """Return action items (list of dicts) for one meeting. Also used by the extract_tasks command."""
     people = extraction.people_from_users(users)
     items = extraction.extract_action_items(sentences, people, meeting.scheduled_at)
+    # A transcript has no speaker names. The meeting's owner (the manager, or the employee who created the meeting)
+    # is the one recording it, so an unowned "I will…" / "I need to…" is assigned to the owner.
+    owner = meeting.manager
+    owner_name = (owner.get_full_name() or owner.username).strip()
+    for it in items:
+        first_person = it.pop("first_person", False)
+        if first_person and it["assignee_id"] is None:
+            it["assignee_id"], it["assignee"] = owner.id, owner_name
+            it["uncertainty_note"] = (it["uncertainty_note"].replace("The speaker is not identified, so the owner is unknown.", "").strip()
+                                      + " Assigned to the meeting owner because it was said as \"I\". Change the owner if someone else spoke.").strip()
+            it["needs_review"] = True
     if len(users) == 1:
         # Only one possible owner: fill it in, but keep the item flagged for the manager.
         only = users[0]
