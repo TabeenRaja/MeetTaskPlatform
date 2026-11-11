@@ -29,6 +29,7 @@ class MeetingSerializer(serializers.ModelSerializer):
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all(), required=False, allow_null=True)
     project_name = serializers.CharField(source="project.name", default=None, read_only=True)
     progress = serializers.SerializerMethodField()
+    assignees = serializers.SerializerMethodField()
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -72,7 +73,7 @@ class MeetingSerializer(serializers.ModelSerializer):
         model = Meeting
         fields = ["id", "title", "description", "scheduled_at", "meeting_mode", "location", "started_at", "is_confidential", "project", "project_name","status",
                   "processing_error", "processing_cancel_requested", "manager_name", "owner", "participant_ids", "participants",
-                  "has_audio", "created_at", "progress"]
+                  "has_audio", "created_at", "progress", "assignees"]
         read_only_fields = ["status", "processing_error", "processing_cancel_requested", "started_at"]
 
     def get_participants(self, m):
@@ -83,6 +84,14 @@ class MeetingSerializer(serializers.ModelSerializer):
             if is_manager:
                 d["pseudonym"] = l.pseudonym  # identity mapping is manager-only
             out.append(d)
+        return out
+
+    def get_assignees(self, m):
+        """Everyone an action item can be given to: the person who created the meeting (listed first) and the
+        participants. Use this list, not `participants`, for the assignee dropdown on the review page."""
+        out = [{"id": m.manager_id, "name": m.manager.display_name, "is_owner": True}]
+        out += [{"id": l.user_id, "name": l.user.display_name, "is_owner": False}
+                for l in m.links.select_related("user") if l.user_id != m.manager_id]
         return out
 
     def get_owner(self, m):
