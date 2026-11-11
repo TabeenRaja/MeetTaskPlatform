@@ -112,7 +112,9 @@ def run(meeting_id):
 
 def run_extraction(meeting, sentences, users):
     """Return action items (list of dicts) for one meeting. Also used by the extract_tasks command."""
-    people = extraction.people_from_users(users)
+    owner_user = meeting.manager
+    # The meeting's creator can be given tasks too, so their name is recognised when it is spoken.
+    people = extraction.people_from_users(users + ([] if any(u.id == owner_user.id for u in users) else [owner_user]))
     items = extraction.extract_action_items(sentences, people, meeting.scheduled_at)
     # A transcript has no speaker names. The meeting's owner (the manager, or the employee who created the meeting)
     # is the one recording it, so an unowned "I will…" / "I need to…" is assigned to the owner.
