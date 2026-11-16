@@ -11,6 +11,12 @@ const KIND = {
   todo: 'bg-emerald-50 text-emerald-700',
 }
 
+const LEGEND = [
+  ['meeting', 'Meetings'],
+  ['task', 'Task deadlines'],
+  ['todo', 'Personal to-dos'],
+]
+
 function monthBounds(cursor) {
   const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
   const end = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)
@@ -105,7 +111,7 @@ export default function Planner() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-navy-900">Planner</h1>
-        <p className="mt-1 text-sm text-slate-500">Schedule meetings and deadlines on the calendar. Keep a personal to-do list that only you see.</p>
+        
       </div>
       <ErrorBox msg={err} />
 
@@ -117,6 +123,13 @@ export default function Planner() {
             <button className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>Next</button>
           </div>
         }>
+          <ul aria-label="Calendar legend" className="mb-3 flex flex-wrap gap-2">
+            {LEGEND.map(([kind, label]) => (
+              <li key={kind} className={`rounded-md px-2 py-1 text-xs font-medium ${KIND[kind]}`}>
+                {label}
+              </li>
+            ))}
+          </ul>
           {!events && <Loading />}
           <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-medium uppercase tracking-wider text-slate-400">
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} className="py-1">{d}</div>)}
@@ -130,7 +143,7 @@ export default function Planner() {
                 <button
                   key={key}
                   onClick={() => { setPicked(key); setDue(key) }}
-                  className={`min-h-24 rounded-xl border p-1.5 text-left transition ${
+                  className={`flex min-h-24 min-w-0 flex-col items-stretch justify-start rounded-xl border p-1.5 text-left transition ${
                     on ? 'border-brand bg-brand-soft' : 'border-slate-100 bg-white hover:border-slate-200'
                   } ${inMonth ? '' : 'opacity-40'}`}
                 >
@@ -181,10 +194,13 @@ export default function Planner() {
                 {todos.map((t) => (
                   <li key={t.id} className="flex items-center gap-2 rounded-xl border border-slate-100 px-3 py-2">
                     <button
+                      type="button"
                       onClick={() => toggle(t)}
-                      className={`grid h-7 w-7 place-items-center rounded-lg border ${t.is_done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-200 text-slate-400'}`}
+                      aria-label={`Completion status for ${t.title}`}
+                      aria-pressed={t.is_done}
+                      className={`grid h-7 w-7 place-items-center rounded-lg border ${t.is_done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 bg-white hover:border-brand'}`}
                     >
-                      <Check size={14} />
+                      {t.is_done && <Check size={14} aria-hidden="true" />}
                     </button>
                     <div className="min-w-0 flex-1">
                       <div className={`truncate text-sm ${t.is_done ? 'text-slate-400 line-through' : 'text-navy-900'}`}>{t.title}</div>
