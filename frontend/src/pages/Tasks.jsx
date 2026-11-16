@@ -788,21 +788,17 @@ export default function Tasks() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Task Command Center
             </h1>
-
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
-              {isMgr
-                ? 'Track accountability, monitor deadlines, and keep every approved meeting action moving.'
-                : 'Keep track of your assigned work, deadlines, and progress in one place.'}
-            </p>
           </div>
 
-          <Link
-            to={isMgr ? '/meetings' : '/notifications'}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 motion-reduce:transform-none"
-          >
-            {isMgr ? 'View meetings' : 'My notifications'}
-            <ArrowRight size={16} />
-          </Link>
+          {isMgr && (
+            <Link
+              to="/meetings"
+              className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 motion-reduce:transform-none"
+            >
+              View meetings
+              <ArrowRight size={16} />
+            </Link>
+          )}
         </div>
       </header>
 
@@ -813,9 +809,6 @@ export default function Tasks() {
             <h2 className="text-base font-bold text-slate-900">
               Work overview
             </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Quick filters for the currently loaded page of tasks.
-            </p>
           </div>
 
           {hasFilters && (
@@ -899,9 +892,11 @@ export default function Tasks() {
               <h2 className="text-base font-bold text-slate-900">
                 {isMgr ? 'Team tasks' : 'My tasks'}
               </h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Search, sort, and organize your task list.
-              </p>
+              {isMgr && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Search, sort, and organize your task list.
+                </p>
+              )}
             </div>
 
             <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
@@ -1277,12 +1272,7 @@ export default function Tasks() {
       )}
 
       {data && tasks.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-          <p className="text-xs text-slate-500">
-            Showing the tasks returned for the current page. Use pagination to view more.
-          </p>
-          <Pager data={data} page={page} setPage={setPage} noun="tasks" />
-        </div>
+        <Pager data={data} page={page} setPage={setPage} noun="tasks" />
       )}
     </div>
   )
