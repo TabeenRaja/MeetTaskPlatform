@@ -30,7 +30,7 @@ export default function Users() {
   const [toggle, setToggle] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // Clear the router state so the notice doesn't reappear on refresh
+  // Clear the router state so the notice doesn't reappear on refresh.
   useEffect(() => {
     if (location.state?.notice) window.history.replaceState({}, "");
   }, [location.state]);
@@ -73,23 +73,22 @@ export default function Users() {
 
   return (
     <>
-      <PageHeader
-        title="Users"
-        subtitle="Create accounts, assign roles and activate or deactivate access."
-      >
+      <PageHeader title="Users">
         <Btn onClick={() => nav("/users/new")}>
-          <Plus size={16} /> Create user
+          <Plus size={16} aria-hidden="true" /> Create user
         </Btn>
       </PageHeader>
 
-      <div className="flex flex-wrap gap-3">
-        <div className="relative w-full sm:w-64">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:w-64 sm:shrink-0">
           <Search
             size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
           />
           <input
             className={`${inputCls} pl-9`}
+            aria-label="Search users"
             placeholder="Search users"
             value={q}
             onChange={(e) => {
@@ -98,21 +97,25 @@ export default function Users() {
             }}
           />
         </div>
-        <select
-          className={`${inputCls} w-auto`}
-          value={roleId}
-          onChange={(e) => {
-            setRoleId(e.target.value);
-            setPage(1);
-          }}
-        >
-          <option value="">All roles</option>
-          {roles.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
+
+        <div className="w-full sm:w-48 sm:shrink-0">
+          <select
+            className={inputCls}
+            aria-label="Filter users by role"
+            value={roleId}
+            onChange={(e) => {
+              setRoleId(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">All roles</option>
+            {roles.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {notice && <Notice tone={notice.tone} msg={notice.msg} />}
@@ -124,13 +127,15 @@ export default function Users() {
           <table className="w-full text-sm">
             <thead className="border-b border-slate-100 bg-slate-50">
               <tr>
-                <th className={TH}>User</th>
-                <th className={TH}>Email</th>
-                <th className={TH}>Department</th>
-                <th className={TH}>Role</th>
-                <th className={TH}>Access</th>
-                <th className={TH}>Status</th>
-                <th className={TH}></th>
+                <th scope="col" className={TH}>User</th>
+                <th scope="col" className={TH}>Email</th>
+                <th scope="col" className={TH}>Department</th>
+                <th scope="col" className={TH}>Role</th>
+                <th scope="col" className={TH}>Access</th>
+                <th scope="col" className={TH}>Status</th>
+                <th scope="col" className={TH}>
+                  <span className="block text-right">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -155,11 +160,20 @@ export default function Users() {
                   </td>
                   <td className="px-4 py-3">
                     {u.role === "ADMIN" ? (
-                      <span className="text-xs text-slate-400">Full</span>
+                      <span className="text-xs text-slate-500">
+                        Administrative
+                      </span>
                     ) : (
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                        {u.permissions.length} permission
-                        {u.permissions.length === 1 ? "" : "s"}
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+                        <span>
+                          {u.permissions.length === 0
+                            ? "No additional permissions"
+                            : `${u.permissions.length} ${
+                                u.permissions.length === 1
+                                  ? "permission"
+                                  : "permissions"
+                              }`}
+                        </span>
                         {Object.keys(u.permission_overrides || {}).length >
                           0 && (
                           <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
@@ -174,7 +188,7 @@ export default function Users() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     {u.role === "ADMIN" ? (
-                      <span className="text-xs text-slate-400">Protected</span>
+                      <span className="text-xs text-slate-500">Protected</span>
                     ) : (
                       <>
                         <Btn
@@ -200,6 +214,7 @@ export default function Users() {
           </table>
         </div>
       )}
+
       <Pager data={data} page={page} setPage={setPage} noun="users" />
 
       {toggle && (
