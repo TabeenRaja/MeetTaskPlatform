@@ -194,11 +194,7 @@ export default function UserForm() {
       </Link>
       <PageHeader
         title={edit ? "Edit user" : "Create new user"}
-        subtitle={
-          edit
-            ? `Update details for @${f.username}.`
-            : "Fill in the details below to create an account."
-        }
+       
       />
 
       <form onSubmit={submit} className="space-y-6">
