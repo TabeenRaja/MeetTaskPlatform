@@ -78,8 +78,8 @@ export default function Login() {
             className="lm-in mt-6 max-w-lg text-lg leading-8 text-slate-300"
             style={{ "--delay": "0.3s" }}
           >
-            Decisions become real work only when a manager has reviewed them.
-            Every action has a source, an owner, and a clear path forward.
+            Capture meetings, review action items, and assign tasks with
+            clear owners and deadlines.
           </p>
 
           {/* Live meeting animation: steps double as the stage selector */}
@@ -101,14 +101,8 @@ export default function Login() {
           <div className="mb-10 lg:hidden">
             <Logo />
           </div>
-          <p
-            className="lm-in font-mono text-[11px] uppercase tracking-[0.2em] text-slate-500"
-            style={{ "--delay": "0.1s" }}
-          >
-            Secure workspace access
-          </p>
           <h2
-            className="lm-in mt-3 text-4xl font-semibold tracking-tight text-navy-900"
+            className="lm-in text-4xl font-semibold tracking-tight text-navy-900"
             style={{ "--delay": "0.18s" }}
           >
             Welcome back
@@ -180,24 +174,18 @@ export default function Login() {
               disabled={busy}
               className="flex h-[52px] w-full items-center justify-center gap-2 rounded-lg bg-brand text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-60"
             >
-              {busy ? "Signing in..." : "Sign in securely"}
+              {busy ? "Signing in..." : "Sign in"}
               {!busy && <ArrowRight size={18} />}
             </button>
           </form>
 
           <div
-            className="lm-in mt-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs text-slate-500"
+            className="lm-in mt-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600"
             style={{ "--delay": "0.5s" }}
           >
-            <Lock size={16} className="shrink-0 text-slate-400" />
-            This workspace is invitation-only. Public registration is disabled.
+            <Lock aria-hidden="true" size={16} className="shrink-0 text-slate-400" />
+            Access is by invitation. Contact your workspace administrator to request an account.
           </div>
-          <p
-            className="lm-in mt-6 text-center text-xs text-slate-400"
-            style={{ "--delay": "0.58s" }}
-          >
-            Need access? Contact your workspace administrator.
-          </p>
         </div>
       </main>
     </div>
