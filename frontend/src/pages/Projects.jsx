@@ -49,10 +49,7 @@ export default function Projects() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Projects"
-        subtitle="Group meetings and backlog work the way Jira groups epics — then track completion as tasks land."
-      >
+      <PageHeader title="Projects">
         <button
           onClick={() => setShowArchived((v) => !v)}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
