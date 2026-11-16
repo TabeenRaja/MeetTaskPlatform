@@ -1,8 +1,7 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  ArrowRight,
   Bell,
   CalendarDays,
   Check,
@@ -10,12 +9,9 @@ import {
   ClipboardList,
   Clock,
   FolderKanban,
-  KeyRound,
   ListChecks,
-  Mic,
   Plus,
   RefreshCw,
-  ScrollText,
   ShieldCheck,
   Users,
 } from "lucide-react";
@@ -27,9 +23,7 @@ import { fmtDay, isoDate, timeAgo } from "../utils";
 
 const CSS = `
 @keyframes mtRise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-@keyframes mtPing{0%{transform:scale(1);opacity:.7}100%{transform:scale(2.4);opacity:0}}
 .mt-rise{animation:mtRise .5s cubic-bezier(.2,.7,.2,1) both}
-.mt-ping{animation:mtPing 1.6s ease-out infinite}
 `;
 
 /* ---------- helpers ---------- */
@@ -45,7 +39,6 @@ const pretty = (s) => {
   const t = s.replaceAll("_", " ").toLowerCase();
   return t[0].toUpperCase() + t.slice(1);
 };
-const sum = (o) => Object.values(o || {}).reduce((a, b) => a + b, 0);
 
 function dueChip(t) {
   if (!t.deadline) return ["No deadline", "bg-slate-100 text-slate-500"];
@@ -109,9 +102,11 @@ function Hero({ name, role, focus, children }) {
           <h1 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
             {greet}, {name}
           </h1>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
-            {focus}
-          </p>
+          {focus && (
+            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
+              {focus}
+            </p>
+          )}
           <div className="mt-6 flex flex-wrap gap-3">{children}</div>
         </div>
         <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-right backdrop-blur">
@@ -253,90 +248,6 @@ function Ring({ segments, empty = "No data yet" }) {
         ))}
       </div>
     </div>
-  );
-}
-
-/* ---------- workflow pipeline (manager) ---------- */
-function Pipeline({ d }) {
-  const stages = [
-    {
-      label: "Captured",
-      v: d.total_meetings,
-      sub: "Meetings",
-      icon: Mic,
-      to: "/meetings",
-    },
-    {
-      label: "In review",
-      v: d.awaiting_review,
-      sub: "Awaiting you",
-      icon: ShieldCheck,
-      to: "/meetings",
-      hot: d.awaiting_review > 0,
-    },
-    {
-      label: "Approved",
-      v: d.approved_meetings,
-      sub: "Outputs approved",
-      icon: Check,
-      to: "/meetings",
-    },
-    {
-      label: "Active",
-      v: d.active_tasks,
-      sub: "Open tasks",
-      icon: ListChecks,
-      to: "/tasks",
-    },
-    {
-      label: "Delivered",
-      v: d.completed_tasks,
-      sub: "Completed",
-      icon: CheckCircle2,
-      to: "/tasks",
-    },
-  ];
-  return (
-    <Card title="From discussion to delivery">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-stretch">
-        {stages.map((s, i) => (
-          <Fragment key={s.label}>
-            {i > 0 && (
-              <ArrowRight
-                size={18}
-                className="hidden shrink-0 self-center text-slate-300 sm:block"
-              />
-            )}
-            <Link
-              to={s.to}
-              className={`group relative flex-1 rounded-xl border p-4 transition hover:-translate-y-0.5 hover:shadow-md ${
-                s.hot
-                  ? "border-amber-300 bg-amber-50"
-                  : "border-slate-200 bg-slate-50/60 hover:bg-white"
-              }`}
-            >
-              {s.hot && (
-                <span className="absolute right-3 top-3 flex h-2.5 w-2.5">
-                  <span className="mt-ping absolute inline-flex h-full w-full rounded-full bg-amber-500" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
-                </span>
-              )}
-              <s.icon
-                size={18}
-                className={s.hot ? "text-amber-600" : "text-brand"}
-              />
-              <div className="mt-3 text-2xl font-semibold tabular-nums text-navy-900">
-                {s.v}
-              </div>
-              <div className="text-sm font-medium text-slate-700">
-                {s.label}
-              </div>
-              <div className="text-xs text-slate-400">{s.sub}</div>
-            </Link>
-          </Fragment>
-        ))}
-      </div>
-    </Card>
   );
 }
 
@@ -863,40 +774,6 @@ function ActivityCard({ notes }) {
   );
 }
 
-/* ---------- admin bars ---------- */
-function BarList({ data, colors = {} }) {
-  const [ready, setReady] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setReady(true), 80);
-    return () => clearTimeout(t);
-  }, []);
-  const entries = Object.entries(data || {});
-  const max = Math.max(...entries.map(([, v]) => v), 1);
-  if (!entries.length) return <Empty text="No data yet." />;
-  return (
-    <ul className="space-y-3">
-      {entries.map(([k, v]) => (
-        <li key={k}>
-          <div className="mb-1 flex justify-between text-sm">
-            <span className="text-slate-600">{pretty(k)}</span>
-            <span className="font-semibold tabular-nums text-navy-900">
-              {v}
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full transition-all duration-700 ease-out"
-              style={{
-                width: ready ? `${(v / max) * 100}%` : "0%",
-                background: colors[k] || "#1f5c99",
-              }}
-            />
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 /* ---------- role views ---------- */
 function ManagerView({
@@ -911,19 +788,11 @@ function ManagerView({
   projects,
   reloadPlanner,
 }) {
-  const focus =
-    d.proofs_awaiting > 0
-      ? `${plural(d.proofs_awaiting, "task")} ${d.proofs_awaiting === 1 ? "has" : "have"} proof waiting for your review.`
-      : d.overdue_tasks > 0
-        ? `${plural(d.overdue_tasks, "task")} across your meetings ${d.overdue_tasks === 1 ? "is" : "are"} overdue.`
-        : d.awaiting_review > 0
-          ? `${plural(d.awaiting_review, "meeting")} ${d.awaiting_review === 1 ? "is" : "are"} waiting for your review. No tasks start until you approve.`
-          : "Everything is on track. Create a meeting to capture the next set of decisions.";
   const done = d.completed_tasks;
   const onTrack = Math.max(d.active_tasks - d.overdue_tasks, 0);
   return (
     <>
-      <Hero name={user.name.split(" ")[0]} role="Manager" focus={focus}>
+      <Hero name={user.name.split(" ")[0]} role="Manager">
         {can(user, "meetings.create") && (
           <Link to="/meetings/new" className={heroBtn}>
             <Plus size={16} /> New meeting
@@ -936,12 +805,12 @@ function ManagerView({
         )}
         {d.proofs_awaiting > 0 && can(user, "tasks.review") && (
           <Link to="/tasks?status=IN_REVIEW" className={heroGhost}>
-            <ShieldCheck size={16} /> Proof to review ({d.proofs_awaiting})
+            <ShieldCheck size={16} /> Review task proof
           </Link>
         )}
         {d.awaiting_review > 0 && can(user, "meetings.review") && (
           <Link to="/meetings" className={heroGhost}>
-            <ShieldCheck size={16} /> Review queue ({d.awaiting_review})
+            <ShieldCheck size={16} /> Review queue
           </Link>
         )}
         {can(user, "analytics.view") && (
@@ -1016,7 +885,6 @@ function ManagerView({
           tone="red"
         />
       </div>
-      <Pipeline d={d} />
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <TaskPanel
@@ -1059,24 +927,18 @@ function EmployeeView({
   todos,
   reloadPlanner,
 }) {
-  const focus =
-    d.overdue_tasks > 0
-      ? `You have ${plural(d.overdue_tasks, "overdue task")}. Start with those first.`
-      : d.upcoming_deadlines > 0
-        ? `${plural(d.upcoming_deadlines, "task")} due in the next 7 days.`
-        : "No upcoming deadlines. Check your tasks for anything new.";
   const open = Math.max(
     d.assigned_tasks - d.completed_tasks - d.overdue_tasks,
     0,
   );
   return (
     <>
-      <Hero name={user.name.split(" ")[0]} role="Employee" focus={focus}>
+      <Hero name={user.name.split(" ")[0]} role="Employee">
         <Link to="/tasks" className={heroBtn}>
           <ListChecks size={16} /> My tasks
         </Link>
         {can(user, "meetings.create") && (
-          <Link to="/meetings/new" className={heroBtn}>
+          <Link to="/meetings/new" className={heroGhost}>
             <Plus size={16} /> New meeting
           </Link>
         )}
@@ -1098,7 +960,7 @@ function EmployeeView({
         <Stat
           i={0}
           to="/tasks"
-          label="Assigned"
+          label="Assigned tasks"
           value={d.assigned_tasks}
           icon={ClipboardList}
         />
@@ -1142,8 +1004,8 @@ function EmployeeView({
           tone="red"
         />
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <div className="min-w-0 space-y-6 lg:col-span-2">
           <TaskPanel
             tasks={tasks}
             setTasks={setTasks}
@@ -1153,7 +1015,7 @@ function EmployeeView({
           <UpcomingCard meetings={meetings} />
           <ActivityCard notes={notes} />
         </div>
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card title="My progress">
             <Ring
               segments={[
@@ -1176,134 +1038,97 @@ function EmployeeView({
   );
 }
 
-function AdminView({ d, notes, user }) {
-  const tasksTotal = sum(d.tasks);
+function AdminView({ d, load, spin, err }) {
+  const roles = Object.entries(d.users || {}).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  const total = roles.reduce((count, [, value]) => count + value, 0);
+  const audit = (d.recent_audit || []).slice(0, 5);
+
   return (
-    <>
-      <Hero
-        name={user.name.split(" ")[0]}
-        role="Admin"
-        focus={`${plural(d.active_users, "active user")} across the workspace. Review recent activity below.`}
-      >
-        <Link to="/users" className={heroBtn}>
-          <Users size={16} /> Manage users
-        </Link>
-        <Link to="/roles" className={heroGhost}>
-          <KeyRound size={16} /> Roles & access
-        </Link>
-        <Link to="/audit" className={heroGhost}>
-          <ScrollText size={16} /> Audit logs
-        </Link>
-      </Hero>
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Stat
-          i={0}
-          to="/users"
-          label="Active users"
-          value={d.active_users}
-          icon={Users}
-        />
-        <Stat
-          i={1}
-          to="/users"
-          label="Total users"
-          value={sum(d.users)}
-          icon={Users}
-          tone="slate"
-        />
-        <Stat
-          i={2}
-          label="Meetings"
-          value={sum(d.meetings)}
-          icon={CalendarDays}
-          tone="amber"
-        />
-        <Stat
-          i={3}
-          label="Tasks"
-          value={tasksTotal}
-          icon={ListChecks}
-          tone="green"
-        />
+    <section className="space-y-6" aria-labelledby="admin-dashboard-title">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 id="admin-dashboard-title" className="text-2xl font-semibold tracking-tight text-navy-900">
+            Admin dashboard
+          </h1>
+         
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={load}
+            disabled={spin}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            <RefreshCw size={16} aria-hidden="true" className={spin ? "animate-spin motion-reduce:animate-none" : ""} />
+            {spin ? "Refreshing…" : "Refresh"}
+          </button>
+          <Link to="/users" className="inline-flex items-center gap-2 rounded-lg bg-brand px-3 py-2 text-sm font-semibold text-white hover:bg-navy-900">
+            <Users size={16} aria-hidden="true" /> Manage users
+          </Link>
+        </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card title="Users by role">
-          <BarList
-            data={d.users}
-            colors={{
-              ADMIN: "#17233a",
-              MANAGER: "#1f5c99",
-              EMPLOYEE: "#94a3b8",
-            }}
-          />
+
+      <ErrorBox msg={err} />
+
+      <div className="grid items-start gap-6 lg:grid-cols-3">
+        <Card title="User accounts">
+          <dl className="grid grid-cols-2 gap-4">
+            <div>
+              <dt className="text-sm text-slate-600">Active accounts</dt>
+              <dd className="mt-1 text-2xl font-semibold tabular-nums text-navy-900">{d.active_users ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-slate-600">Total accounts</dt>
+              <dd className="mt-1 text-2xl font-semibold tabular-nums text-navy-900">{d.users ? total : "—"}</dd>
+            </div>
+          </dl>
+          {roles.length > 0 && (
+            <div className="mt-5 border-t border-slate-200 pt-4">
+              <h2 className="mb-2 text-sm font-semibold text-navy-900">Accounts by role</h2>
+              <dl className="space-y-2">
+                {roles.map(([role, count]) => (
+                  <div key={role} className="flex justify-between gap-3 text-sm">
+                    <dt className="break-words text-slate-600">{pretty(role)}</dt>
+                    <dd className="font-medium tabular-nums text-navy-900">{count}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          )}
         </Card>
-        <Card title="Meetings by status">
-          <BarList
-            data={d.meetings}
-            colors={{
-              APPROVED: "#10b981",
-              PENDING_REVIEW: "#f59e0b",
-              PROCESSING: "#f59e0b",
-              REJECTED: "#dc2626",
-              FAILED: "#dc2626",
-              DRAFT: "#94a3b8",
-            }}
-          />
-        </Card>
-        <Card title="Tasks by status">
-          <Ring
-            segments={[
-              { label: "Done", value: d.tasks.DONE || 0, color: "#10b981" },
-              {
-                label: "In progress",
-                value: d.tasks.IN_PROGRESS || 0,
-                color: "#1f5c99",
-              },
-              {
-                label: "Pending",
-                value: d.tasks.PENDING || 0,
-                color: "#cbd5e1",
-              },
-            ]}
-            empty="No tasks yet"
-          />
-        </Card>
-      </div>
-      <div className="grid gap-6 lg:grid-cols-3">
+
         <Card
           title="Recent audit events"
           className="lg:col-span-2"
-          action={
-            <Link
-              to="/audit"
-              className="text-xs font-medium text-brand hover:underline"
-            >
-              Full log →
-            </Link>
-          }
+          action={<Link to="/audit" className="text-sm font-medium text-brand hover:underline">View audit log</Link>}
         >
-          {d.recent_audit.length === 0 ? (
+          {audit.length === 0 ? (
             <Empty text="No audit events yet." />
           ) : (
-            <ol className="space-y-4 border-l border-slate-200 pl-5">
-              {d.recent_audit.map((a) => (
-                <li key={a.id} className="relative">
-                  <span className="absolute -left-[25px] top-1.5 h-2 w-2 rounded-full bg-brand" />
-                  <div className="font-mono text-xs text-navy-900">
-                    {a.action}
+            <ol className="divide-y divide-slate-100">
+              {audit.map((event) => (
+                <li key={event.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
+                  <div className="min-w-0 break-words">
+                    <p className="text-sm font-medium text-navy-900">{event.action ? pretty(event.action) : "Audit event"}</p>
+                    <p className="mt-0.5 text-sm text-slate-600">
+                      {event.actor_name || "System"}
+                      {event.target_type && ` · ${event.target_type}${event.target_id == null ? "" : ` #${event.target_id}`}`}
+                    </p>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    {a.actor_name || "system"} · {a.target_type} {a.target_id} ·{" "}
-                    {timeAgo(a.created_at)}
-                  </div>
+                  {event.created_at && (
+                    <time dateTime={event.created_at} title={new Date(event.created_at).toLocaleString()} className="text-sm text-slate-600">
+                      {timeAgo(event.created_at)}
+                    </time>
+                  )}
                 </li>
               ))}
             </ol>
           )}
         </Card>
-        <ActivityCard notes={notes} />
       </div>
-    </>
+    </section>
   );
 }
 
@@ -1338,6 +1163,11 @@ export default function Dashboard() {
     setErr("");
     setSpin(true);
     try {
+      if (isAdmin) {
+        const { data } = await api.get("/dashboard/");
+        setD(data);
+        return;
+      }
       const calls = [api.get("/dashboard/"), api.get("/notifications/")];
       if (!isAdmin) {
         calls.push(
@@ -1388,6 +1218,8 @@ export default function Dashboard() {
   if (err && !d) return <ErrorBox msg={err} />;
   if (!d) return <Skeleton />;
 
+  if (isAdmin) return <AdminView d={d} load={load} spin={spin} err={err} />;
+
   const props = {
     d,
     tasks,
@@ -1415,7 +1247,6 @@ export default function Dashboard() {
       <ErrorBox msg={err} />
       {user.role === "MANAGER" && <ManagerView {...props} />}
       {user.role === "EMPLOYEE" && <EmployeeView {...props} />}
-      {isAdmin && <AdminView {...props} />}
     </div>
   );
 }
