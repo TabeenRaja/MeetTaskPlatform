@@ -94,9 +94,7 @@ function RecordingPlayer({ meetingId, title }) {
   };
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-500">
-        The recording is kept on the server after transcription, so you can listen to it again at any time.
-      </p>
+     
       {url ? (
         <audio controls autoPlay src={url} className="w-full" />
       ) : (
