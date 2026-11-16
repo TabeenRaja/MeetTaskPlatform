@@ -16,14 +16,7 @@ import { DEPARTMENTS, OTHER, PHONE_LENGTH, cleanPhone } from "../constants";
 import { PasswordChecklist, passwordError } from "../passwordRules";
 import { fmtDate } from "../utils";
 
-const ABOUT = {
-  ADMIN:
-    "Your administrator profile. Keep your details up to date and your account secure.",
-  MANAGER:
-    "Your manager profile. Keep your details up to date so your team can reach you.",
-  EMPLOYEE:
-    "Your personal profile. Keep your details up to date and your account secure.",
-};
+
 
 const L = ({ children }) => (
   <label className="mb-1 block text-sm font-medium text-slate-700">
@@ -271,73 +264,66 @@ function ChangePasswordCard() {
 
 export default function Profile() {
   const { user, logout } = useAuth();
+
   return (
-    <>
-      <PageHeader
-        title="Profile"
-        subtitle="Your personal details and account security."
-      />
-      <div className="grid items-start gap-6 lg:grid-cols-3">
-        <Card className="flex flex-col items-center self-start text-center">
-          <Avatar name={user.name} size={84} />
-          <h2 className="mt-4 text-lg font-semibold text-navy-900">
-            {user.name}
-          </h2>
-          <p className="text-sm text-slate-500">@{user.username}</p>
-          <div className="mt-3">
-            <Badge value={user.role} />
+    <div className="mx-auto w-full max-w-6xl space-y-5">
+      <PageHeader title="Profile" />
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="shrink-0">
+              <Avatar name={user.name} size={52} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="break-words text-lg font-semibold text-navy-900">
+                {user.name}
+              </h2>
+              <p className="break-all text-sm text-slate-500">
+                @{user.username}
+              </p>
+            </div>
           </div>
-          <p className="mt-4 text-sm text-slate-500">{ABOUT[user.role]}</p>
-          <Btn variant="secondary" className="mt-6 w-full" onClick={logout}>
-            <LogOut size={16} /> Log out
-          </Btn>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge value={user.role} />
+            <Badge value={user.is_active ? "ACTIVE" : "INACTIVE"} />
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid items-start gap-5 xl:grid-cols-2">
+        <Card title="Account details">
+          <div className="divide-y divide-slate-100">
+            <EditableRow label="First name" field="first_name" user={user} />
+            <EditableRow label="Last name" field="last_name" user={user} />
+            <Row label="Email">
+              <span className="break-all">{user.email || "—"}</span>
+            </Row>
+            <EditableRow
+              label="Phone"
+              field="phone"
+              user={user}
+              kind="phone"
+            />
+            <EditableRow
+              label="Department"
+              field="department"
+              user={user}
+              kind="department"
+            />
+            <Row label="Member since">{fmtDate(user.date_joined)}</Row>
+          </div>
         </Card>
 
-        <div className="space-y-6 lg:col-span-2">
-          <Card title="Account">
-            <div className="divide-y divide-slate-100">
-              <EditableRow label="First name" field="first_name" user={user} />
-              <EditableRow label="Last name" field="last_name" user={user} />
-              <Row label="Username">{user.username}</Row>
-              <Row label="Email">{user.email || "—"}</Row>
-              <EditableRow
-                label="Phone"
-                field="phone"
-                user={user}
-                kind="phone"
-              />
-              <EditableRow
-                label="Department"
-                field="department"
-                user={user}
-                kind="department"
-              />
-              <Row label="Role">
-                <Badge value={user.role} />
-              </Row>
-              <Row label="Status">
-                <Badge value={user.is_active ? "ACTIVE" : "INACTIVE"} />
-              </Row>
-              <Row label="Member since">{fmtDate(user.date_joined)}</Row>
-            </div>
-            <p className="mt-3 text-xs text-slate-400">
-              Click the pencil to edit a field. Username, email and role are
-              managed by an administrator.
-            </p>
-          </Card>
-
-          <ChangePasswordCard />
-
-          <Card title="Security">
-            <p className="text-sm text-slate-600">
-              Accounts are invitation-only. If you forget your password, use
-              "Forgot password?" on the sign-in page and a reset link will be
-              emailed to you. Sign-in tokens expire after 30 minutes and renew
-              automatically for up to 1 day.
-            </p>
-          </Card>
-        </div>
+        <ChangePasswordCard />
       </div>
-    </>
+
+      <div className="flex justify-end">
+        <Btn variant="secondary" onClick={logout}>
+          <LogOut size={16} aria-hidden="true" /> Log out
+        </Btn>
+      </div>
+    </div>
   );
 }
