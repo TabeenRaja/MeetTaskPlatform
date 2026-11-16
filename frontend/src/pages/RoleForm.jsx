@@ -109,7 +109,6 @@ export default function RoleForm() {
       </Link>
       <PageHeader
         title={edit ? `Edit role: ${f.name}` : "Create role"}
-        subtitle="Name the role, then choose what everyone with this role can do. To make an exception for one person, edit that user."
       />
 
       <form onSubmit={submit} className="space-y-6">
@@ -139,12 +138,6 @@ export default function RoleForm() {
               />
             </div>
           </div>
-          <p className="mt-3 text-xs text-slate-400">
-            The workspace follows the permissions: a role with review, task
-            assignment, project or analytics permissions gets the manager
-            screens; any other role gets the employee screens. Each person's
-            dashboard shows only what their permissions allow.
-          </p>
         </Card>
 
         {groups.map(([group, items]) => {
@@ -154,7 +147,7 @@ export default function RoleForm() {
               key={group}
               title={group}
               action={
-                <button
+                items.length > 1 && <button
                   type="button"
                   onClick={() => toggleGroup(items)}
                   className="text-xs font-medium text-brand hover:underline"
@@ -176,11 +169,6 @@ export default function RoleForm() {
                       <span>
                         <span className="font-medium">
                           {p.label}
-                          <span className="ml-2 font-normal text-slate-400">
-                            {has(p.code)
-                              ? "· everyone with this role"
-                              : "· not allowed for this role"}
-                          </span>
                         </span>
                         <span className="mt-0.5 block text-xs text-slate-500">
                           {p.description}
