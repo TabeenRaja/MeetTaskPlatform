@@ -1,3 +1,4 @@
+import { NotificationBell } from "../pages/Notifications";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
@@ -15,7 +16,6 @@ import {
   ScrollText,
   Users,
   X,
-  ShieldCheck,
   KeyRound,
 } from "lucide-react";
 import { api } from "../api";
@@ -216,52 +216,33 @@ export default function Layout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <NavLink
-              to="/notifications"
-              className="relative rounded-xl p-2.5 text-slate-600 hover:bg-slate-100 transition"
-              title="Notifications"
-            >
-              <Bell size={18} />
-              {unread > 0 && (
-                <span className="absolute right-1.5 top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm">
-                  {unread}
-                </span>
-              )}
-            </NavLink>
-            <div className="h-5 w-px bg-slate-200" />
-            <Badge value={user.role} />
-            <NavLink
-              to="/profile"
-              title="Profile view"
-              className="ring-2 ring-slate-200/80 rounded-full hover:ring-brand transition shadow-sm"
-            >
-              <Avatar name={user.name} size={36} />
-            </NavLink>
-          </div>
+         <div className="flex items-center gap-4">
+  {user.role !== "ADMIN" && (
+  <>
+    <NotificationBell />
+    <div className="h-5 w-px bg-slate-200" />
+  </>
+)}
+  <Badge value={user.role} />
+  <NavLink
+    to="/profile"
+    title="Profile view"
+    className="ring-2 ring-slate-200/80 rounded-full hover:ring-brand transition shadow-sm"
+  >
+    <Avatar name={user.name} size={36} />
+  </NavLink>
+</div>
+
+
         </header>
 
         <main className="mx-auto w-full max-w-[1400px] space-y-6 p-6 sm:p-10 min-h-[calc(100vh-140px)]">
           <Outlet />
         </main>
-        {/* Professional Corporate Footer */}
-        <footer className="border-t border-slate-200/80 bg-white px-6 sm:px-10 py-6 text-xs text-slate-400">
-          <div className="mx-auto w-full max-w-[1600px] flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="font-bold text-slate-700 tracking-tight">
-                MeetTask AI
-              </span>
-              <span className="text-slate-300">·</span>
-              <span>Secure Office Intelligence & Task Automation</span>
-            </div>
-            <div className="flex items-center gap-5 font-medium">
-              <span className="flex items-center gap-1.5 text-slate-500">
-                <ShieldCheck size={14} className="text-emerald-600" /> SOC2
-                Compliant Pipeline
-              </span>
-              <span className="text-slate-300">·</span>
-              <span>© {new Date().getFullYear()}</span>
-            </div>
+        <footer className="border-t border-slate-200 bg-white px-6 py-4 text-xs text-slate-600 sm:px-10">
+          <div className="mx-auto flex w-full max-w-[1320px] flex-wrap items-center justify-between gap-2">
+            <span className="font-semibold text-slate-700">MeetTask</span>
+            <span>© {new Date().getFullYear()}</span>
           </div>
         </footer>
       </div>
