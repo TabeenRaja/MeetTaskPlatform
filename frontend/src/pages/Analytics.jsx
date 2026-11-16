@@ -3,14 +3,88 @@ import { Link } from 'react-router-dom'
 import { api, errMsg } from '../api'
 import { Card, Empty, ErrorBox, Loading, PageHeader } from '../components/ui'
 
-function Bar({ value, max, color = '#1f5c99' }) {
-  const w = max ? Math.round((value / max) * 100) : 0
+function weekLabel(start) {
+  return new Date(start + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function OnTimeRate({ value }) {
+  if (value == null) return <span aria-label="Rate unavailable">—</span>
+  const color = value >= 80 ? 'bg-emerald-500' : value >= 50 ? 'bg-brand' : 'bg-red-500'
   return (
-    <div className="h-8 overflow-hidden rounded-lg bg-slate-100">
-      <div className="flex h-full items-center px-2 text-xs font-semibold text-white transition-all" style={{ width: `${Math.max(w, value ? 8 : 0)}%`, background: color }}>
-        {value}
+    <div className="flex items-center gap-3">
+      <div aria-hidden="true" className="h-2 w-20 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${value}%` }} />
       </div>
+      <span className="tabular-nums">{value}%</span>
     </div>
+  )
+}
+
+function WeeklyActivity({ weeks }) {
+  const max = Math.max(0, ...weeks.flatMap((week) => [week.total, week.completed_in_week]))
+  if (!max) return <Empty text="No tasks were created or completed in this period." />
+
+  const step = Math.ceil(max / 4)
+  const scale = step * 4
+
+  return (
+    <>
+      <ul className="mb-5 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
+        <li className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-brand" /> Created that week</li>
+        <li className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-600" /> Completed that week</li>
+      </ul>
+      <div className="overflow-x-auto">
+        <div className="flex min-w-full gap-3" style={{ minWidth: Math.max(320, weeks.length * 54 + 36) }}>
+          <div aria-hidden="true" className="flex h-48 shrink-0 flex-col justify-between text-right text-xs tabular-nums text-slate-500">
+            {[4, 3, 2, 1, 0].map((tick) => <span key={tick}>{tick * step}</span>)}
+          </div>
+          <div className="relative flex flex-1">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 flex h-48 flex-col justify-between">
+              {[4, 3, 2, 1, 0].map((tick) => <div key={tick} className="border-t border-slate-200" />)}
+            </div>
+            {weeks.map((week) => {
+              const label = weekLabel(week.week_start)
+              const summary = `Week of ${label}: ${week.total} created, ${week.completed_in_week} completed`
+              return (
+                <div key={week.week_start} className="relative min-w-0 flex-1 text-center" title={summary}>
+                  <span className="sr-only">{summary}</span>
+                  <div aria-hidden="true" className="flex h-48 items-end justify-center gap-1 px-1">
+                    <div className="w-1/3 max-w-8 rounded-t-sm bg-brand" style={{ height: `${(week.total / scale) * 100}%` }} />
+                    <div className="w-1/3 max-w-8 rounded-t-sm bg-emerald-600" style={{ height: `${(week.completed_in_week / scale) * 100}%` }} />
+                  </div>
+                  <div aria-hidden="true" className="mt-2 whitespace-nowrap text-xs text-slate-600">{label}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      <details className="mt-5 border-t border-slate-100 pt-3">
+        <summary className="cursor-pointer text-sm font-medium text-brand">Weekly breakdown</summary>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full whitespace-nowrap text-left text-sm">
+            <thead className="text-xs text-slate-600">
+              <tr>
+                <th scope="col" className="px-2 py-2">Week of</th>
+                <th scope="col" className="px-2 py-2">Created</th>
+                <th scope="col" className="px-2 py-2">Completed that week</th>
+                <th scope="col" className="px-2 py-2">Of tasks created that week, now complete</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weeks.map((week) => (
+                <tr key={week.week_start} className="border-t border-slate-100 tabular-nums">
+                  <th scope="row" className="px-2 py-2 font-medium">{weekLabel(week.week_start)}</th>
+                  <td className="px-2 py-2">{week.total}</td>
+                  <td className="px-2 py-2">{week.completed_in_week}</td>
+                  <td className="px-2 py-2">{week.total ? `${week.done}/${week.total} (${Math.round((week.done / week.total) * 100)}%)` : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+    </>
   )
 }
 
@@ -27,16 +101,13 @@ export default function Analytics() {
   if (err && !d) return <ErrorBox msg={err} />
   if (!d) return <Loading />
 
-  const maxWeek = Math.max(...d.weeks.map((w) => w.total), 1)
   const t = d.totals
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Analytics"
-        subtitle="Weekly completion of work you created, plus who delivers on time."
-      >
+      <PageHeader title="Analytics">
         <select
+          aria-label="Analytics date range"
           className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
           value={weeks}
           onChange={(e) => setWeeks(Number(e.target.value))}
@@ -60,31 +131,8 @@ export default function Analytics() {
         ))}
       </div>
 
-      <Card title="Weekly analysis">
-        <p className="mb-4 text-sm text-slate-500">
-          Each bar is tasks created that week. Green is how many of those are now done.
-        </p>
-        {d.weeks.every((w) => !w.total) ? <Empty text="No tasks in this window yet." /> : (
-          <div className="space-y-3">
-            {d.weeks.map((w) => {
-              const label = new Date(w.week_start + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-              const pct = w.total ? Math.round((w.done / w.total) * 100) : 0
-              return (
-                <div key={w.week_start} className="grid items-center gap-3 sm:grid-cols-[110px_1fr_80px]">
-                  <div className="text-xs font-medium text-slate-500">Week of {label}</div>
-                  <div className="relative h-9 overflow-hidden rounded-lg bg-slate-100">
-                    <div className="absolute inset-y-0 left-0 bg-brand/25" style={{ width: `${(w.total / maxWeek) * 100}%` }} />
-                    <div className="absolute inset-y-0 left-0 bg-emerald-500" style={{ width: `${(w.done / maxWeek) * 100}%` }} />
-                    <div className="relative flex h-full items-center px-3 text-xs font-medium text-navy-900">
-                      {w.done}/{w.total} done · {w.completed_in_week} completed this week
-                    </div>
-                  </div>
-                  <div className="text-right text-sm font-semibold tabular-nums text-navy-900">{pct}%</div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+      <Card title="Weekly task activity">
+        <WeeklyActivity weeks={d.weeks} />
       </Card>
 
       <Card title="Employee performance" action={<Link to="/tasks" className="text-xs font-medium text-brand hover:underline">Open tasks →</Link>}>
@@ -112,10 +160,7 @@ export default function Analytics() {
                     <td className="py-3 text-amber-700">{e.late}</td>
                     <td className="py-3 text-red-600">{e.overdue}</td>
                     <td className="py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-24"><Bar value={e.on_time_rate || 0} max={100} color={e.on_time_rate >= 80 ? '#10b981' : e.on_time_rate >= 50 ? '#1f5c99' : '#dc2626'} /></div>
-                        <span className="tabular-nums">{e.on_time_rate == null ? '—' : `${e.on_time_rate}%`}</span>
-                      </div>
+                      <OnTimeRate value={e.on_time_rate} />
                     </td>
                   </tr>
                 ))}
