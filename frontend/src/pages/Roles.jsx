@@ -72,7 +72,6 @@ export default function Roles() {
     <>
       <PageHeader
         title="Roles & access"
-        subtitle="Create roles and choose what each one is allowed to do. You can still make exceptions for individual people on their user page."
       >
         <Btn onClick={() => nav("/roles/new")}>
           <Plus size={16} /> Create role
@@ -91,14 +90,12 @@ export default function Roles() {
                 <th className={TH}>Role</th>
                 <th className={TH}>Permissions</th>
                 <th className={TH}>Users</th>
-                <th className={TH}></th>
+                <th className={TH}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {roles.map((r) => {
                 const locked = r.base === "ADMIN";
-                const shown = r.permissions.slice(0, 3);
-                const more = r.permissions.length - shown.length;
                 return (
                   <tr key={r.id} className="border-t border-slate-100 align-top">
                     <td className="px-4 py-3">
@@ -110,7 +107,7 @@ export default function Roles() {
                           </span>
                         )}
                       </div>
-                      {r.description && (
+                      {!locked && r.description && (
                         <div className="mt-0.5 max-w-xs text-xs text-slate-500">
                           {r.description}
                         </div>
@@ -119,15 +116,15 @@ export default function Roles() {
                     <td className="px-4 py-3">
                       {locked ? (
                         <span className="text-xs text-slate-500">
-                          Everything
+                          User management, role management, and audit logs
                         </span>
                       ) : r.permissions.length === 0 ? (
                         <span className="text-xs text-slate-400">
-                          No extra permissions
+                          No additional permissions
                         </span>
                       ) : (
                         <div className="flex max-w-md flex-wrap gap-1.5">
-                          {shown.map((c) => (
+                          {r.permissions.map((c) => (
                             <span
                               key={c}
                               className="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-medium text-brand"
@@ -135,11 +132,6 @@ export default function Roles() {
                               {label[c] || c}
                             </span>
                           ))}
-                          {more > 0 && (
-                            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-500">
-                              +{more} more
-                            </span>
-                          )}
                         </div>
                       )}
                     </td>
